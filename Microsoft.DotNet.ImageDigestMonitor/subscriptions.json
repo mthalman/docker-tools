@@ -1,0 +1,35 @@
+{
+  "repos": {
+    "https://github.com/dotnet/dotnet-docker.git": {
+      "branches": [
+        "master"
+      ]
+    },
+    "https://github.com/dotnet/dotnet-docker-nightly.git": {
+      "branches": [
+        "master"
+      ]
+    },
+    "https://github.com/dotnet/dotnet-docker-samples.git": {
+      "branches": [
+        "master"
+      ]
+    },
+    "https://github.com/aspnet/aspnet-docker.git": {
+      "branches": [
+        "master",
+        "dev"
+      ]
+    },
+    "https://github.com/microsoft/dotnet-framework-docker.git": {
+      "branches": [
+        "master"
+      ]
+    },
+    "https://github.com/microsoft/dotnet-framework-docker-samples.git": {
+      "branches": [
+        "dockerhub"
+      ]
+    }
+  }
+}
