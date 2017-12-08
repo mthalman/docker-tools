@@ -1,5 +1,5 @@
 param(
-    [string]$Subscriptions = 'subscriptions.json',
+    [string]$Subscriptions = "${PSScriptRoot}/subscriptions.json",
     [string]$ImageBuilderImageName = 'microsoft/dotnet-buildtools-prereqs:image-builder-jessie-20171031123612',
     [string]$VersionsGitUserName = 'dotnet-build-bot',
     [string]$VersionsGitEmail = 'dotnet-build-bot@microsoft.com',
