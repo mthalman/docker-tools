@@ -13,11 +13,13 @@ $ErrorActionPreference = 'Stop'
 
 function exec($cmd) {
     Write-Host -ForegroundColor Cyan ">>> $cmd $args"
+
     $originalErrorPreference = $ErrorActionPreference
     $ErrorActionPreference = 'Continue'
     & $cmd @args
     $exitCode = $LastExitCode
     $ErrorActionPreference = $originalErrorPreference
+
     if ($exitCode -ne 0) {
         Write-Host -ForegroundColor Red "<<< [$exitCode] $cmd $args"
         fatal 'Command exited with non-zero code'
@@ -28,39 +30,41 @@ exec docker pull $ImageBuilderImageName
 
 $subscriptionsJson = Get-Content $Subscriptions | ConvertFrom-Json
 
-$repoSandbox = "$PSScriptRoot/RepoSandbox";
+[string]$RepoSandbox = "$(Get-Location)/RepoSandbox"
 New-Item -ItemType Directory -Path $repoSandbox
+
 Try {
     Push-Location $repoSandbox
     Try {
         $subscriptionsJson.Repos.PSObject.Properties |
             ForEach-Object {
-            $repoName = $_.Name
-            exec git clone $_.Value.Url $repoName
+                $repoName = $_.Name
+                exec git clone $_.Value.Url $repoName
 
-            Push-Location $repoName
-            try {
-                $_.Value.Branches | ForEach-Object {
-                    $branch = $_
-                    exec git checkout $branch
-                    exec docker run --rm `
-                        -v /var/run/docker.sock:/var/run/docker.sock `
-                        -v "${repoSandbox}/${repoName}:/repo" `
-                        -w /repo `
-                        $ImageBuilderImageName `
-                        updateVersions `
-                            $VersionsGitUserName `
-                            $VersionsGitEmail `
-                            $VersionsGitAccessToken `
-                            --git-branch $VersionsGitBranch `
-                            --git-owner $VersionsGitOwner `
-                            --architecture $Architecture
+                Push-Location $repoName
+                try {
+                    $_.Value.Branches | ForEach-Object {
+                        $branch = $_
+                        exec git checkout $branch
+
+                        exec docker run --rm `
+                            -v /var/run/docker.sock:/var/run/docker.sock `
+                            -v "${repoSandbox}/${repoName}:/repo" `
+                            -w /repo `
+                            $ImageBuilderImageName `
+                            updateVersions `
+                                $VersionsGitUserName `
+                                $VersionsGitEmail `
+                                $VersionsGitAccessToken `
+                                --git-branch $VersionsGitBranch `
+                                --git-owner $VersionsGitOwner `
+                                --architecture $Architecture
+                    }
+                }
+                Finally {
+                    Pop-Location
                 }
             }
-            Finally {
-                Pop-Location
-            }
-        }
     }
     Finally {
         Pop-Location
