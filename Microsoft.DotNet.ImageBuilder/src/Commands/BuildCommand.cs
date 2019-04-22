@@ -32,7 +32,15 @@ namespace Microsoft.DotNet.ImageBuilder.Commands
 
             if (BuiltTags.Any())
             {
-                PushImages();
+                if (Options.IsPushEnabled)
+                {
+                    PushImages();
+                }
+
+                if (Options.ExportPath != null)
+                {
+                    ImageImportExportHelper.ExportImages(BuiltTags, Options.ExportPath, Options.IsDryRun);
+                }
             }
 
             WriteBuildSummary();
@@ -218,21 +226,18 @@ namespace Microsoft.DotNet.ImageBuilder.Commands
 
         private void PushImages()
         {
-            if (Options.IsPushEnabled)
-            {
-                Logger.WriteHeading("PUSHING IMAGES");
+            Logger.WriteHeading("PUSHING IMAGES");
 
-                ExecuteWithUser(() =>
+            ExecuteWithUser(() =>
+            {
+                IEnumerable<string> pushTags = BuiltTags
+                    .Where(tag => !tag.Model.IsLocal)
+                    .Select(tag => tag.FullyQualifiedName);
+                foreach (string tag in pushTags)
                 {
-                    IEnumerable<string> pushTags = BuiltTags
-                        .Where(tag => !tag.Model.IsLocal)
-                        .Select(tag => tag.FullyQualifiedName);
-                    foreach (string tag in pushTags)
-                    {
-                        ExecuteHelper.ExecuteWithRetry("docker", $"push {tag}", Options.IsDryRun);
-                    }
-                });
-            }
+                    ExecuteHelper.ExecuteWithRetry("docker", $"push {tag}", Options.IsDryRun);
+                }
+            });
         }
 
         private bool UpdateDockerfileFromCommands(PlatformInfo platform, out string dockerfilePath)

@@ -14,6 +14,7 @@ namespace Microsoft.DotNet.ImageBuilder.Commands
         public bool IsPushEnabled { get; set; }
         public bool IsRetryEnabled { get; set; }
         public bool IsSkipPullingEnabled { get; set; }
+        public string ExportPath { get; set; }
 
         public BuildOptions() : base()
         {
@@ -28,6 +29,10 @@ namespace Microsoft.DotNet.ImageBuilder.Commands
             bool isPushEnabled = false;
             syntax.DefineOption("push", ref isPushEnabled, "Push built images to Docker registry");
             IsPushEnabled = isPushEnabled;
+
+            string exportPath = null;
+            syntax.DefineOption("export-path", ref exportPath, "Indicates that built images should be exported to the specified path");
+            ExportPath = exportPath;
 
             bool isRetryEnabled = false;
             syntax.DefineOption("retry", ref isRetryEnabled, "Retry building images upon failure");
