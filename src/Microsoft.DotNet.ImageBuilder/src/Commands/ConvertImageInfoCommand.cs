@@ -46,7 +46,10 @@ namespace Microsoft.DotNet.ImageBuilder.Commands
                     if (images.Any())
                     {
                         var sharedTags = manifestImage.SharedTags?
-                            .Select(tag => tag.Name)
+                            .Select(tag => new V2.SharedTag
+                            {
+                                Name = tag.Name
+                            })
                             .ToList();
                         if (sharedTags?.Any() == false)
                         {
@@ -55,7 +58,7 @@ namespace Microsoft.DotNet.ImageBuilder.Commands
 
                         V2.ImageData newImage = new V2.ImageData
                         {
-                            ProductVersion = ,
+                            ProductVersion = manifestImage.Model.ProductVersion,
                             SharedTags = sharedTags,
                             Platforms = images
                                 .Select(image =>
