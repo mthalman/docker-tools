@@ -12,6 +12,7 @@ using Microsoft.DotNet.ImageBuilder.Models.Manifest;
 using Microsoft.DotNet.ImageBuilder.Tests.Helpers;
 using Moq;
 using Newtonsoft.Json;
+using Newtonsoft.Json.Linq;
 using Xunit;
 using static Microsoft.DotNet.ImageBuilder.Tests.Helpers.DockerfileHelper;
 using static Microsoft.DotNet.ImageBuilder.Tests.Helpers.ImageInfoHelper;
@@ -27,14 +28,31 @@ namespace Microsoft.DotNet.ImageBuilder.Tests
         [Fact]
         public async Task ImageInfoTagOutput()
         {
-            PublishManifestCommand command = new PublishManifestCommand(Mock.Of<IManifestToolService>(),
+            static JArray createTagManifest(string digest)
+            {
+                return new JArray(
+                    new JObject
+                    {
+                        { "MediaType", PublishManifestCommand.ManifestListMediaType },
+                        { "Digest", digest }
+                    });
+            }
+
+            Mock<IManifestToolService> manifestToolService = new Mock<IManifestToolService>();
+            manifestToolService
+                .Setup(o => o.Inspect("repo1:sharedtag2", false))
+                .Returns(createTagManifest("digest1"));
+            manifestToolService
+                .Setup(o => o.Inspect("repo2:sharedtag3", false))
+                .Returns(createTagManifest("digest2"));
+
+            PublishManifestCommand command = new PublishManifestCommand(manifestToolService.Object,
                 Mock.Of<IEnvironmentService>(), Mock.Of<ILoggerService>());
 
             using TempFolderContext tempFolderContext = new TempFolderContext();
 
             command.Options.Manifest = Path.Combine(tempFolderContext.Path, "manifest.json");
             command.Options.ImageInfoPath = Path.Combine(tempFolderContext.Path, "image-info.json");
-            command.Options.ImageInfoOutputPath = Path.Combine(tempFolderContext.Path, "image-info-output.json");
 
             string dockerfile1 = CreateDockerfile("1.0/repo1/os", tempFolderContext);
             string dockerfile2 = CreateDockerfile("1.0/repo2/os", tempFolderContext);
@@ -58,15 +76,12 @@ namespace Microsoft.DotNet.ImageBuilder.Tests
                                         
                                     }
                                 },
-                                SharedTags = new List<SharedTag>
+                                Manifest = new ManifestData
                                 {
-                                    new SharedTag
+                                    SharedTags =
                                     {
-                                        Name = "sharedtag1"
-                                    },
-                                    new SharedTag
-                                    {
-                                        Name = "sharedtag2"
+                                        "sharedtag1",
+                                        "sharedtag2"
                                     }
                                 }
                             }
@@ -87,15 +102,12 @@ namespace Microsoft.DotNet.ImageBuilder.Tests
 
                                     }
                                 },
-                                SharedTags = new List<SharedTag>
+                                Manifest = new ManifestData
                                 {
-                                    new SharedTag
+                                    SharedTags =
                                     {
-                                        Name = "sharedtag1"
-                                    },
-                                    new SharedTag
-                                    {
-                                        Name = "sharedtag3"
+                                        "sharedtag1",
+                                        "sharedtag3"
                                     }
                                 }
                             }
@@ -134,20 +146,20 @@ namespace Microsoft.DotNet.ImageBuilder.Tests
             command.LoadManifest();
             await command.ExecuteAsync();
 
-            string actualOutput = File.ReadAllText(command.Options.ImageInfoOutputPath);
+            string actualOutput = File.ReadAllText(command.Options.ImageInfoPath);
 
             ImageArtifactDetails actualImageArtifactDetails = JsonConvert.DeserializeObject<ImageArtifactDetails>(actualOutput);
 
             // Since we don't know what the exact Created time will be that the command has calculated, we're going to
             // pull it from the data, verify that it's recent and then use it for constructing our expected data value.
-            DateTime actualCreatedDate = actualImageArtifactDetails.Repos[0].Images[0].SharedTags[0].Created;
+            DateTime actualCreatedDate = actualImageArtifactDetails.Repos[0].Images[0].Manifest.Created;
             Assert.True(actualCreatedDate > (DateTime.Now.ToUniversalTime() - TimeSpan.FromMinutes(1)));
             Assert.True(actualCreatedDate < (DateTime.Now.ToUniversalTime() + TimeSpan.FromMinutes(1)));
 
-            imageArtifactDetails.Repos[0].Images[0].SharedTags[0].Created = actualCreatedDate;
-            imageArtifactDetails.Repos[0].Images[0].SharedTags[1].Created = actualCreatedDate;
-            imageArtifactDetails.Repos[1].Images[0].SharedTags[0].Created = actualCreatedDate;
-            imageArtifactDetails.Repos[1].Images[0].SharedTags[1].Created = actualCreatedDate;
+            imageArtifactDetails.Repos[0].Images[0].Manifest.Digest = "digest1";
+            imageArtifactDetails.Repos[0].Images[0].Manifest.Created = actualCreatedDate;
+            imageArtifactDetails.Repos[1].Images[0].Manifest.Digest = "digest2";
+            imageArtifactDetails.Repos[1].Images[0].Manifest.Created = actualCreatedDate;
 
             string expectedOutput = JsonHelper.SerializeObject(imageArtifactDetails);
 
