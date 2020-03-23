@@ -1,13 +1,11 @@
 ﻿using System;
-using System.Collections.Generic;
 using System.ComponentModel.Composition;
 using System.IO;
 using System.Linq;
-using System.Text;
 using System.Threading.Tasks;
 using Microsoft.DotNet.ImageBuilder.ViewModel;
 using Newtonsoft.Json;
-
+using Newtonsoft.Json.Linq;
 using V1 = Microsoft.DotNet.ImageBuilder.Models.ImageV1;
 using V2 = Microsoft.DotNet.ImageBuilder.Models.Image;
 
@@ -17,11 +15,13 @@ namespace Microsoft.DotNet.ImageBuilder.Commands
     public class ConvertImageInfoCommand : ManifestCommand<ConvertImageInfoOptions>
     {
         private readonly IDockerService dockerService;
+        private readonly IManifestToolService manifestToolService;
 
         [ImportingConstructor]
-        public ConvertImageInfoCommand(IDockerService dockerService)
+        public ConvertImageInfoCommand(IDockerService dockerService, IManifestToolService manifestToolService)
         {
             this.dockerService = dockerService;
+            this.manifestToolService = manifestToolService ?? throw new ArgumentNullException(nameof(manifestToolService));
         }
 
         public override Task ExecuteAsync()
@@ -54,10 +54,6 @@ namespace Microsoft.DotNet.ImageBuilder.Commands
             foreach (var image in imageArtifactDetails.Repos.SelectMany(repo => repo.Images).Where(image => Manifest.GetFilteredImages().Contains(image.ManifestImage)))
             {
                 DateTime mostRecentSimpleTag = DateTime.MinValue.ToUniversalTime();
-                if (image.SharedTags != null)
-                {
-                    mostRecentSimpleTag = image.SharedTags.First().Created;
-                }
 
                 foreach (var platform in image.Platforms)
                 {
@@ -73,9 +69,9 @@ namespace Microsoft.DotNet.ImageBuilder.Commands
                     }
                 }
 
-                if (image.SharedTags != null)
+                if (image.Manifest != null)
                 {
-                    image.SharedTags.ForEach(tag => tag.Created = mostRecentSimpleTag);
+                    image.Manifest.Created = mostRecentSimpleTag;
                 }
             }
         }
@@ -105,21 +101,29 @@ namespace Microsoft.DotNet.ImageBuilder.Commands
                                 .Any(platform => image.Key == GetPlatformDockerfile(platform)));
                     if (images.Any())
                     {
-                        var sharedTags = manifestImage.SharedTags?
-                            .Select(tag => new V2.SharedTag
-                            {
-                                Name = tag.Name
-                            })
-                            .ToList();
-                        if (sharedTags?.Any() == false)
+                        V2.ManifestData manifestData = null;
+
+                        if (manifestImage.SharedTags?.Any() == true)
                         {
-                            sharedTags = null;
+                            JArray tagManifest = this.manifestToolService.Inspect(manifestImage.SharedTags.First().FullyQualifiedName, false);
+                            string digest = tagManifest
+                                .OfType<JObject>()
+                                .First(manifestType => manifestType["MediaType"].Value<string>() == PublishManifestCommand.ManifestListMediaType)
+                                ["Digest"].Value<string>();
+
+                            manifestData = new V2.ManifestData
+                            {
+                                SharedTags = manifestImage.SharedTags
+                                    .Select(tag => tag.Name)
+                                      .ToList(),
+                                Digest = digest
+                            };
                         }
 
                         V2.ImageData newImage = new V2.ImageData
                         {
                             ProductVersion = manifestImage.Model.ProductVersion,
-                            SharedTags = sharedTags,
+                            Manifest = manifestData,
                             Platforms = images
                                 .Select(image =>
                                 {
