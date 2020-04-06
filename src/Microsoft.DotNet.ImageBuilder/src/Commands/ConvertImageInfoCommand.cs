@@ -85,6 +85,11 @@ namespace Microsoft.DotNet.ImageBuilder.Commands
                 RepoInfo manifestRepo = Manifest.AllRepos
                     .FirstOrDefault(manifestRepo => manifestRepo.Model.Name == repo.Repo);
 
+                if (manifestRepo is null)
+                {
+                    continue;
+                }
+
                 V2.RepoData newRepo = new V2.RepoData
                 {
                     Repo = repo.Repo
