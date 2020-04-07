@@ -46,33 +46,41 @@ namespace Microsoft.DotNet.ImageBuilder.Commands
             string output = JsonHelper.SerializeObject(imageArtifactDetails);
             File.WriteAllText(Options.ImageInfoOutputPath, output);
 
+            imageArtifactDetails = ImageInfoHelper.LoadFromContent(output, Manifest, true);
+            RemoveOutOfDateContent(imageArtifactDetails);
+
             return Task.CompletedTask;
         }
 
         private void GetCreatedDates(V2.ImageArtifactDetails imageArtifactDetails)
         {
-            foreach (var image in imageArtifactDetails.Repos.SelectMany(repo => repo.Images).Where(image => Manifest.GetFilteredImages().Contains(image.ManifestImage)))
+            foreach (var repo in imageArtifactDetails.Repos)
             {
-                DateTime mostRecentSimpleTag = DateTime.MinValue.ToUniversalTime();
-
-                foreach (var platform in image.Platforms)
+                foreach (var image in repo.Images.Where(image => Manifest.GetFilteredImages().Contains(image.ManifestImage)))
                 {
-                    var platformInfo = image.ManifestImage.FilteredPlatforms.FirstOrDefault(p => platform.Equals(p));
-                    if (platformInfo != null)
+                    DateTime mostRecentSimpleTag = DateTime.MinValue.ToUniversalTime();
+
+                    foreach (var platform in image.Platforms)
                     {
-                        this.dockerService.PullImage(platformInfo.Tags.First().FullyQualifiedName, false);
-                        platform.Created = this.dockerService.GetCreatedDate(platformInfo.Tags.First().FullyQualifiedName, false).ToUniversalTime();
-                        if (platform.Created > mostRecentSimpleTag)
+                        var platformInfo = image.ManifestImage.FilteredPlatforms.FirstOrDefault(p => platform.Equals(p));
+                        if (platformInfo != null)
                         {
-                            mostRecentSimpleTag = platform.Created;
+                            string tag = TagInfo.GetFullyQualifiedName("mcr.microsoft.com/" + repo.Repo, platform.SimpleTags.First());
+                            this.dockerService.PullImage(tag, false);
+                            platform.Created = this.dockerService.GetCreatedDate(tag, false).ToUniversalTime();
+                            if (platform.Created > mostRecentSimpleTag)
+                            {
+                                mostRecentSimpleTag = platform.Created;
+                            }
                         }
+                    }
+
+                    if (image.Manifest != null)
+                    {
+                        image.Manifest.Created = mostRecentSimpleTag;
                     }
                 }
 
-                if (image.Manifest != null)
-                {
-                    image.Manifest.Created = mostRecentSimpleTag;
-                }
             }
         }
 
@@ -169,6 +177,48 @@ namespace Microsoft.DotNet.ImageBuilder.Commands
         private static string GetPlatformDockerfile(PlatformInfo platform)
         {
             return platform.DockerfilePathRelativeToManifest.EndsWith("/Dockerfile") ? platform.DockerfilePathRelativeToManifest : platform.DockerfilePathRelativeToManifest + "/Dockerfile";
+        }
+
+        private void RemoveOutOfDateContent(V2.ImageArtifactDetails imageArtifactDetails)
+        {
+            for (int repoIndex = imageArtifactDetails.Repos.Count - 1; repoIndex >= 0; repoIndex--)
+            {
+                V2.RepoData repoData = imageArtifactDetails.Repos[repoIndex];
+                RepoInfo manifestRepo = Manifest.AllRepos.FirstOrDefault(manifestRepo => manifestRepo.Name == "mcr.microsoft.com/" + repoData.Repo);
+
+                // If there doesn't exist a matching repo in the manifest, remove it from the image info
+                if (manifestRepo is null)
+                {
+                    imageArtifactDetails.Repos.Remove(repoData);
+                    continue;
+                }
+
+                for (int imageIndex = repoData.Images.Count - 1; imageIndex >= 0; imageIndex--)
+                {
+                    V2.ImageData imageData = repoData.Images[imageIndex];
+                    ImageInfo manifestImage = imageData.ManifestImage;
+
+                    // If there doesn't exist a matching image in the manifest, remove it from the image info
+                    if (manifestImage is null)
+                    {
+                        repoData.Images.Remove(imageData);
+                        continue;
+                    }
+
+                    for (int platformIndex = imageData.Platforms.Count - 1; platformIndex >= 0; platformIndex--)
+                    {
+                        V2.PlatformData platformData = imageData.Platforms[platformIndex];
+                        PlatformInfo manifestPlatform = manifestImage.AllPlatforms
+                            .FirstOrDefault(manifestPlatform => platformData.Equals(manifestPlatform));
+
+                        // If there doesn't exist a matching platform in the manifest, remove it from the image info
+                        if (manifestPlatform is null)
+                        {
+                            imageData.Platforms.Remove(platformData);
+                        }
+                    }
+                }
+            }
         }
     }
 }
