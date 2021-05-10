@@ -6,8 +6,10 @@ using System;
 using System.Collections.Generic;
 using System.ComponentModel.Composition;
 using System.Linq;
+using System.Security.Cryptography;
 using Microsoft.DotNet.ImageBuilder.Models.Manifest;
 
+#nullable enable
 namespace Microsoft.DotNet.ImageBuilder
 {
     [Export(typeof(IDockerService))]
@@ -23,7 +25,7 @@ namespace Microsoft.DotNet.ImageBuilder
             _manifestToolService = manifestToolService ?? throw new ArgumentNullException(nameof(manifestToolService));
         }
 
-        public string GetImageDigest(string image, bool isDryRun)
+        public string? GetImageDigest(string image, bool isDryRun)
         {
             IEnumerable<string> digests = DockerHelper.GetImageDigests(image, isDryRun);
 
@@ -87,6 +89,34 @@ namespace Microsoft.DotNet.ImageBuilder
             }
         }
 
+        public string Run(string image, string command, string? name = null, bool skipAutoCleanup = false, string? entrypoint = null,
+            IDictionary<string, string>? volumeMounts = null, bool isDryRun = false)
+        {
+            List<string> options = new()
+            {
+                name is null ? string.Empty : $"--name {name}",
+                skipAutoCleanup ? string.Empty : "--rm",
+                volumeMounts is not null ?
+                    string.Concat(volumeMounts.Select(kvp => $"-v {kvp.Key}:{kvp.Value}")) :
+                    string.Empty,
+                entrypoint is not null ? $"--entrypoint {entrypoint}" : string.Empty
+            };
+
+            string optionsStr = string.Join(" ", options);
+
+            return ExecuteHelper.Execute("docker", $"run {optionsStr} {image} {command}", isDryRun);
+        }
+
+        public void Copy(string src, string dst, bool isDryRun) => ExecuteHelper.Execute("docker", $"cp {src} {dst}", isDryRun);
+
+        public void DeleteContainer(string containerName, bool isDryRun)
+        {
+            if (ContainerExists(containerName, isDryRun))
+{
+                ExecuteHelper.Execute("docker", $"rm -f {containerName}", isDryRun);
+            }
+        }
+
         public bool LocalImageExists(string tag, bool isDryRun) => DockerHelper.LocalImageExists(tag, isDryRun);
 
         public long GetImageSize(string image, bool isDryRun) => DockerHelper.GetImageSize(image, isDryRun);
@@ -100,5 +130,15 @@ namespace Microsoft.DotNet.ImageBuilder
 
             return DateTime.Parse(DockerHelper.GetCreatedDate(image, isDryRun));
         }
+
+        private static bool ContainerExists(string containerName, bool isDryRun) =>
+            ResourceExists("container", $"-f \"name={containerName}\"", isDryRun);
+
+        private static bool ResourceExists(string type, string filterArg, bool isDryRun)
+        {
+            string output = ExecuteHelper.Execute("docker", $"{type} ls -a -q {filterArg}", isDryRun);
+            return !string.IsNullOrEmpty(output);
+        }
     }
 }
+#nullable disable

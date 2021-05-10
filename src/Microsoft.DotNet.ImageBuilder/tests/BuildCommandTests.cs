@@ -2237,15 +2237,15 @@ namespace Microsoft.DotNet.ImageBuilder.Tests
                 // the appropriate request.
                 dockerServiceMock
                     .Setup(o => o.GetImageDigest($"{RegistryOverride}/{RepoPrefix}{RuntimeDepsRepo}:{Tag}", false))
-                    .Returns(callCount => callCount > 2 ? $"{RegistryOverride}/{RepoPrefix}{RuntimeDepsRepo}@{RuntimeDepsDigest}" : null);
+                    .ReturnsWithCallCount(callCount => callCount > 2 ? $"{RegistryOverride}/{RepoPrefix}{RuntimeDepsRepo}@{RuntimeDepsDigest}" : null);
 
                 dockerServiceMock
                     .Setup(o => o.GetImageDigest($"{RegistryOverride}/{RepoPrefix}{RuntimeRepo}:{Tag}", false))
-                    .Returns(callCount => callCount > 1 ? $"{RegistryOverride}/{RepoPrefix}{RuntimeRepo}@{RuntimeDigest}" : null);
+                    .ReturnsWithCallCount(callCount => callCount > 1 ? $"{RegistryOverride}/{RepoPrefix}{RuntimeRepo}@{RuntimeDigest}" : null);
 
                 dockerServiceMock
                     .Setup(o => o.GetImageDigest($"{RegistryOverride}/{RepoPrefix}{AspnetRepo}:{Tag}", false))
-                    .Returns(callCount => callCount > 0 ? $"{RegistryOverride}/{RepoPrefix}{AspnetRepo}@{AspnetDigest}" : null);
+                    .ReturnsWithCallCount(callCount => callCount > 0 ? $"{RegistryOverride}/{RepoPrefix}{AspnetRepo}@{AspnetDigest}" : null);
             }
             
             dockerServiceMock

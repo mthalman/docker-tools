@@ -39,6 +39,7 @@ namespace Microsoft.DotNet.ImageBuilder.ViewModel
         private string RepoName { get; set; }
         public IEnumerable<TagInfo> Tags { get; private set; }
         public IDictionary<string, CustomBuildLegGroup> CustomLegGroups { get; private set; }
+        public OS OS => Model.OS;
         private VariableHelper VariableHelper { get; set; }
 
         public static PlatformInfo Create(Platform model, string fullRepoModelName, string repoName, VariableHelper variableHelper, string baseDirectory)

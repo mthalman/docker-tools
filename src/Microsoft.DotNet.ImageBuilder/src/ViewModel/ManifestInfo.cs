@@ -141,6 +141,12 @@ namespace Microsoft.DotNet.ImageBuilder.ViewModel
             return FilteredRepos.FirstOrDefault(repo => repo.Id == id);
         }
 
+        public IEnumerable<PlatformInfo> GetPlatformsByDockerfile(string dockerfilePath) =>
+            AllRepos
+                .SelectMany(repo => repo.AllImages)
+                .SelectMany(image => image.AllPlatforms)
+                .Where(platform => platform.DockerfilePathRelativeToManifest == dockerfilePath);
+
         public PlatformInfo GetPlatformByTag(string fullTagName)
         {
             PlatformInfo result = AllRepos

@@ -33,6 +33,16 @@ namespace Microsoft.DotNet.ImageBuilder
         public string BuildImage(string dockerfilePath, string buildContextPath, IEnumerable<string> tags, IDictionary<string, string> buildArgs, bool isRetryEnabled, bool isDryRun) =>
             _inner.BuildImage(dockerfilePath, buildContextPath, tags, buildArgs, isRetryEnabled, isDryRun);
 
+        public string Run(string image, string command, string name, bool skipAutoCleanup = false, string entrypoint = null,
+            IDictionary<string, string> volumeMounts = null, bool isDryRun = false) =>
+            _inner.Run(image, command, name, skipAutoCleanup, entrypoint, volumeMounts, isDryRun);
+
+        public void Copy(string src, string dst, bool isDryRun) =>
+            _inner.Copy(src, dst, isDryRun);
+
+        public void DeleteContainer(string containerName, bool isDryRun) =>
+            _inner.DeleteContainer(containerName, isDryRun);
+
         public void CreateTag(string image, string tag, bool isDryRun) =>
             _inner.CreateTag(image, tag, isDryRun);
 

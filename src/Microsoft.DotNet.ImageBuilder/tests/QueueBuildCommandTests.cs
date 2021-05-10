@@ -9,8 +9,10 @@ using System.Linq;
 using System.Runtime.CompilerServices;
 using System.Threading.Tasks;
 using Microsoft.DotNet.ImageBuilder.Commands;
+using Microsoft.DotNet.ImageBuilder.Models.Image;
 using Microsoft.DotNet.ImageBuilder.Models.Subscription;
 using Microsoft.DotNet.ImageBuilder.Services;
+using Microsoft.DotNet.ImageBuilder.Tests.Helpers.Subscriptions;
 using Microsoft.TeamFoundation.Core.WebApi;
 using Microsoft.VisualStudio.Services.Common;
 using Microsoft.VisualStudio.Services.WebApi;
@@ -18,6 +20,7 @@ using Moq;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using Xunit;
+using static Microsoft.DotNet.ImageBuilder.Tests.Helpers.ManifestHelper;
 using WebApi = Microsoft.TeamFoundation.Build.WebApi;
 
 namespace Microsoft.DotNet.ImageBuilder.Tests
@@ -30,23 +33,51 @@ namespace Microsoft.DotNet.ImageBuilder.Tests
         [Fact]
         public async Task QueueBuildCommand_BuildInProgress()
         {
-            const string path1 = "path1";
+            const string repo = "repo1";
+            const string dockerfile1Path = "dockerfile1/Dockerfile";
 
-            Subscription[] subscriptions = new Subscription[]
+            SubscriptionInfo[] subscriptionInfos = new SubscriptionInfo[]
             {
-                CreateSubscription("repo1")
+                new SubscriptionInfo(
+                    CreateSubscription(repo),
+                    CreateManifest(
+                        CreateRepo(
+                            repo,
+                            CreateImage(
+                                CreatePlatform(dockerfile1Path, new string[] { "tag1" })))))
             };
 
-            List<List<SubscriptionImagePaths>> allSubscriptionImagePaths = new()
+            Dictionary<GitFile, List<DockerfileInfo>> dockerfileInfos = new()
             {
-                new List<SubscriptionImagePaths>
                 {
-                    new SubscriptionImagePaths
+                    subscriptionInfos[0].Subscription.Manifest,
+                    new List<DockerfileInfo>
                     {
-                        SubscriptionId = subscriptions[0].Id,
-                        ImagePaths = new string[]
+                        new DockerfileInfo(dockerfile1Path, new FromImageInfo("base1", "sha256:base1digest"))
+                    }
+                }
+            };
+
+            List<List<SubscriptionRebuildInfo>> allSubscriptionImagePaths = new()
+            {
+                new List<SubscriptionRebuildInfo>
+                {
+                    new SubscriptionRebuildInfo
+                    {
+                        SubscriptionId = subscriptionInfos[0].Subscription.Id,
+                        ImageRebuildInfos = new List<ImageRebuildInfo>
                         {
-                            path1
+                            new ImageRebuildInfo
+                            {
+                                DockerfilePath = dockerfile1Path,
+                                Reasons = new List<ImageRebuildReason>
+                                {
+                                    new ImageRebuildReason
+                                    {
+                                        ReasonType = ImageRebuildReasonType.BaseImageChange
+                                    }
+                                }
+                            }
                         }
                     }
                 }
@@ -57,7 +88,8 @@ namespace Microsoft.DotNet.ImageBuilder.Tests
                 CreateBuild("http://contoso")
             };
 
-            using (TestContext context = new(subscriptions, allSubscriptionImagePaths, inProgressBuilds, new PagedList<WebApi.Build>()))
+            using (TestContext context = new(
+                allSubscriptionImagePaths, subscriptionInfos, dockerfileInfos, inProgressBuilds, new PagedList<WebApi.Build>()))
             {
                 await context.ExecuteCommandAsync();
 
@@ -74,23 +106,51 @@ namespace Microsoft.DotNet.ImageBuilder.Tests
         [Fact]
         public async Task QueueBuildCommand_RecentFailedBuilds_MaxFailed()
         {
-            const string path1 = "path1";
+            const string repo = "repo1";
+            const string dockerfile1Path = "dockerfile1/Dockerfile";
 
-            Subscription[] subscriptions = new Subscription[]
+            SubscriptionInfo[] subscriptionInfos = new SubscriptionInfo[]
             {
-                CreateSubscription("repo1")
+                new SubscriptionInfo(
+                    CreateSubscription(repo),
+                    CreateManifest(
+                        CreateRepo(
+                            repo,
+                            CreateImage(
+                                CreatePlatform(dockerfile1Path, new string[] { "tag1" })))))
             };
 
-            List<List<SubscriptionImagePaths>> allSubscriptionImagePaths = new()
+            Dictionary<GitFile, List<DockerfileInfo>> dockerfileInfos = new()
             {
-                new List<SubscriptionImagePaths>
                 {
-                    new SubscriptionImagePaths
+                    subscriptionInfos[0].Subscription.Manifest,
+                    new List<DockerfileInfo>
                     {
-                        SubscriptionId = subscriptions[0].Id,
-                        ImagePaths = new string[]
+                        new DockerfileInfo(dockerfile1Path, new FromImageInfo("base1", "sha256:base1digest"))
+                    }
+                }
+            };
+
+            List<List<SubscriptionRebuildInfo>> allSubscriptionImagePaths = new()
+            {
+                new List<SubscriptionRebuildInfo>
+                {
+                    new SubscriptionRebuildInfo
+                    {
+                        SubscriptionId = subscriptionInfos[0].Subscription.Id,
+                        ImageRebuildInfos = new List<ImageRebuildInfo>
                         {
-                            path1
+                            new ImageRebuildInfo
+                            {
+                                DockerfilePath = dockerfile1Path,
+                                Reasons = new List<ImageRebuildReason>
+                                {
+                                    new ImageRebuildReason
+                                    {
+                                        ReasonType = ImageRebuildReasonType.BaseImageChange
+                                    }
+                                }
+                            }
                         }
                     }
                 }
@@ -107,7 +167,8 @@ namespace Microsoft.DotNet.ImageBuilder.Tests
                 allBuilds.Add(failedBuild);
             }
 
-            using TestContext context = new(subscriptions, allSubscriptionImagePaths, new PagedList<WebApi.Build>(), allBuilds);
+            using TestContext context = new(
+                allSubscriptionImagePaths, subscriptionInfos, dockerfileInfos, new PagedList<WebApi.Build>(), allBuilds);
             await context.ExecuteCommandAsync();
 
             context.Verify(notificationPostCallCount: 1, isQueuedBuildExpected: false);
@@ -119,23 +180,51 @@ namespace Microsoft.DotNet.ImageBuilder.Tests
         [Fact]
         public async Task QueueBuildCommand_RecentFailedBuilds_PartialFailed()
         {
-            const string path1 = "path1";
+            const string repo = "repo1";
+            const string dockerfile1Path = "dockerfile1/Dockerfile";
 
-            Subscription[] subscriptions = new Subscription[]
+            SubscriptionInfo[] subscriptionInfos = new SubscriptionInfo[]
             {
-                CreateSubscription("repo1")
+                new SubscriptionInfo(
+                    CreateSubscription(repo),
+                    CreateManifest(
+                        CreateRepo(
+                            repo,
+                            CreateImage(
+                                CreatePlatform(dockerfile1Path, new string[] { "tag1" })))))
             };
 
-            List<List<SubscriptionImagePaths>> allSubscriptionImagePaths = new()
+            Dictionary<GitFile, List<DockerfileInfo>> dockerfileInfos = new()
             {
-                new List<SubscriptionImagePaths>
                 {
-                    new SubscriptionImagePaths
+                    subscriptionInfos[0].Subscription.Manifest,
+                    new List<DockerfileInfo>
                     {
-                        SubscriptionId = subscriptions[0].Id,
-                        ImagePaths = new string[]
+                        new DockerfileInfo(dockerfile1Path, new FromImageInfo("base1", "sha256:base1digest"))
+                    }
+                }
+            };
+
+            List<List<SubscriptionRebuildInfo>> allSubscriptionImagePaths = new()
+            {
+                new List<SubscriptionRebuildInfo>
+                {
+                    new SubscriptionRebuildInfo
+                    {
+                        SubscriptionId = subscriptionInfos[0].Subscription.Id,
+                        ImageRebuildInfos = new List<ImageRebuildInfo>
                         {
-                            path1
+                            new ImageRebuildInfo
+                            {
+                                DockerfilePath = dockerfile1Path,
+                                Reasons = new List<ImageRebuildReason>
+                                {
+                                    new ImageRebuildReason
+                                    {
+                                        ReasonType = ImageRebuildReasonType.BaseImageChange
+                                    }
+                                }
+                            }
                         }
                     }
                 }
@@ -152,17 +241,18 @@ namespace Microsoft.DotNet.ImageBuilder.Tests
                 allBuilds.Add(failedBuild);
             }
 
-            using TestContext context = new(subscriptions, allSubscriptionImagePaths, new PagedList<WebApi.Build>(), allBuilds);
+            using TestContext context = new(
+                allSubscriptionImagePaths, subscriptionInfos, dockerfileInfos, new PagedList<WebApi.Build>(), allBuilds);
             await context.ExecuteCommandAsync();
 
 
             Dictionary<Subscription, IList<string>> expectedPathsBySubscription = new()
             {
                 {
-                    subscriptions[0],
+                    subscriptionInfos[0].Subscription,
                     new List<string>
                     {
-                        path1
+                        dockerfile1Path
                     }
                 }
             };
@@ -176,23 +266,51 @@ namespace Microsoft.DotNet.ImageBuilder.Tests
         [Fact]
         public async Task QueueBuildCommand_RecentFailedBuilds_SucceededAndFailed()
         {
-            const string path1 = "path1";
+            const string repo = "repo1";
+            const string dockerfile1Path = "dockerfile1/Dockerfile";
 
-            Subscription[] subscriptions = new Subscription[]
+            SubscriptionInfo[] subscriptionInfos = new SubscriptionInfo[]
             {
-                CreateSubscription("repo1")
+                new SubscriptionInfo(
+                    CreateSubscription(repo),
+                    CreateManifest(
+                        CreateRepo(
+                            repo,
+                            CreateImage(
+                                CreatePlatform(dockerfile1Path, new string[] { "tag1" })))))
             };
 
-            List<List<SubscriptionImagePaths>> allSubscriptionImagePaths = new()
+            Dictionary<GitFile, List<DockerfileInfo>> dockerfileInfos = new()
             {
-                new List<SubscriptionImagePaths>
                 {
-                    new SubscriptionImagePaths
+                    subscriptionInfos[0].Subscription.Manifest,
+                    new List<DockerfileInfo>
                     {
-                        SubscriptionId = subscriptions[0].Id,
-                        ImagePaths = new string[]
+                        new DockerfileInfo(dockerfile1Path, new FromImageInfo("base1", "sha256:base1digest"))
+                    }
+                }
+            };
+
+            List<List<SubscriptionRebuildInfo>> allSubscriptionImagePaths = new()
+            {
+                new List<SubscriptionRebuildInfo>
+                {
+                    new SubscriptionRebuildInfo
+                    {
+                        SubscriptionId = subscriptionInfos[0].Subscription.Id,
+                        ImageRebuildInfos = new List<ImageRebuildInfo>
                         {
-                            path1
+                            new ImageRebuildInfo
+                            {
+                                DockerfilePath = dockerfile1Path,
+                                Reasons = new List<ImageRebuildReason>
+                                {
+                                    new ImageRebuildReason
+                                    {
+                                        ReasonType = ImageRebuildReasonType.BaseImageChange
+                                    }
+                                }
+                            }
                         }
                     }
                 }
@@ -215,16 +333,17 @@ namespace Microsoft.DotNet.ImageBuilder.Tests
                 allBuilds.Add(failedBuild);
             }
 
-            using TestContext context = new(subscriptions, allSubscriptionImagePaths, new PagedList<WebApi.Build>(), allBuilds);
+            using TestContext context = new(
+                allSubscriptionImagePaths, subscriptionInfos, dockerfileInfos, new PagedList<WebApi.Build>(), allBuilds);
             await context.ExecuteCommandAsync();
 
             Dictionary<Subscription, IList<string>> expectedPathsBySubscription = new()
             {
                 {
-                    subscriptions[0],
+                    subscriptionInfos[0].Subscription,
                     new List<string>
                     {
-                        path1
+                        dockerfile1Path
                     }
                 }
             };
@@ -239,51 +358,116 @@ namespace Microsoft.DotNet.ImageBuilder.Tests
         [Fact]
         public async Task QueueBuildCommand_MultiSubscription()
         {
-            const string path1 = "path1";
-            const string path2 = "path2";
-            const string path3 = "path3";
+            const string repo1 = "repo1";
+            const string repo2 = "repo2";
 
-            Subscription[] subscriptions = new Subscription[]
+            const string dockerfile1Path = "dockerfile1/Dockerfile";
+            const string dockerfile2Path = "dockerfile2/Dockerfile";
+            const string dockerfile3Path = "dockerfile3/Dockerfile";
+
+            SubscriptionInfo[] subscriptionInfos = new SubscriptionInfo[]
             {
-                CreateSubscription("repo1"),
-                CreateSubscription("repo2")
+                new SubscriptionInfo(
+                    CreateSubscription(repo1),
+                    CreateManifest(
+                        CreateRepo(
+                            repo1,
+                            CreateImage(
+                                CreatePlatform(dockerfile1Path, new string[] { "tag1" }))))),
+                new SubscriptionInfo(
+                    CreateSubscription(repo2),
+                    CreateManifest(
+                        CreateRepo(
+                            repo2,
+                            CreateImage(
+                                CreatePlatform(dockerfile2Path, new string[] { "tag1" }),
+                                CreatePlatform(dockerfile3Path, new string[] { "tag2" })))))
             };
 
-            List<List<SubscriptionImagePaths>> allSubscriptionImagePaths = new List<List<SubscriptionImagePaths>>
+            Dictionary<GitFile, List<DockerfileInfo>> dockerfileInfos = new()
             {
-                new List<SubscriptionImagePaths>
                 {
-                    new SubscriptionImagePaths
+                    subscriptionInfos[0].Subscription.Manifest,
+                    new List<DockerfileInfo>
                     {
-                        SubscriptionId = subscriptions[0].Id,
-                        ImagePaths = new string[]
+                        new DockerfileInfo(dockerfile1Path, new FromImageInfo("base1", "sha256:base1digest"))
+                    }
+                },
+                {
+                    subscriptionInfos[1].Subscription.Manifest,
+                    new List<DockerfileInfo>
+                    {
+                        new DockerfileInfo(dockerfile2Path, new FromImageInfo("base1", "sha256:base1digest")),
+                        new DockerfileInfo(dockerfile3Path, new FromImageInfo("base1", "sha256:base1digest"))
+                    }
+                }
+            };
+
+            List<List<SubscriptionRebuildInfo>> allSubscriptionImagePaths = new List<List<SubscriptionRebuildInfo>>
+            {
+                new List<SubscriptionRebuildInfo>
+                {
+                    new SubscriptionRebuildInfo
+                    {
+                        SubscriptionId = subscriptionInfos[0].Subscription.Id,
+                        ImageRebuildInfos = new List<ImageRebuildInfo>
                         {
-                            path1
+                            new ImageRebuildInfo
+                            {
+                                DockerfilePath = dockerfile1Path,
+                                Reasons = new List<ImageRebuildReason>
+                                {
+                                    new ImageRebuildReason
+                                    {
+                                        ReasonType = ImageRebuildReasonType.BaseImageChange
+                                    }
+                                }
+                            }
                         }
                     },
-                    new SubscriptionImagePaths
+                    new SubscriptionRebuildInfo
                     {
-                        SubscriptionId = subscriptions[1].Id,
-                        ImagePaths = new string[]
+                        SubscriptionId = subscriptionInfos[1].Subscription.Id,
+                        ImageRebuildInfos = new List<ImageRebuildInfo>
                         {
-                            path2
+                            new ImageRebuildInfo
+                            {
+                                DockerfilePath = dockerfile2Path,
+                                Reasons = new List<ImageRebuildReason>
+                                {
+                                    new ImageRebuildReason
+                                    {
+                                        ReasonType = ImageRebuildReasonType.BaseImageChange
+                                    }
+                                }
+                            }
                         }
                     }
                 },
-                new List<SubscriptionImagePaths>
+                new List<SubscriptionRebuildInfo>
                 {
-                    new SubscriptionImagePaths
+                    new SubscriptionRebuildInfo
                     {
-                        SubscriptionId = subscriptions[1].Id,
-                        ImagePaths = new string[]
+                        SubscriptionId = subscriptionInfos[1].Subscription.Id,
+                        ImageRebuildInfos = new List<ImageRebuildInfo>
                         {
-                            path3
+                            new ImageRebuildInfo
+                            {
+                                DockerfilePath = dockerfile3Path,
+                                Reasons = new List<ImageRebuildReason>
+                                {
+                                    new ImageRebuildReason
+                                    {
+                                        ReasonType = ImageRebuildReasonType.BaseImageChange
+                                    }
+                                }
+                            }
                         }
                     }
                 }
             };
 
-            using (TestContext context = new TestContext(subscriptions, allSubscriptionImagePaths))
+            using (TestContext context = new TestContext(allSubscriptionImagePaths, subscriptionInfos, dockerfileInfos))
             {
                 await context.ExecuteCommandAsync();
 
@@ -291,18 +475,18 @@ namespace Microsoft.DotNet.ImageBuilder.Tests
                     new Dictionary<Subscription, IList<string>>
                 {
                     {
-                        subscriptions[0],
+                        subscriptionInfos[0].Subscription,
                         new List<string>
                         {
-                            path1
+                            dockerfile1Path
                         }
                     },
                     {
-                        subscriptions[1],
+                        subscriptionInfos[1].Subscription,
                         new List<string>
                         {
-                            path2,
-                            path3
+                            dockerfile2Path,
+                            dockerfile3Path
                         }
                     }
                 };
@@ -312,37 +496,164 @@ namespace Microsoft.DotNet.ImageBuilder.Tests
         }
 
         /// <summary>
+        /// Verifies that the paths to be queued will be expanded for the entire graph of dependencies.
+        /// </summary>
+        [Fact]
+        public async Task QueueBuildCommand_GraphExpansion()
+        {
+            const string runtimeDepsRepo = "runtimedeps-repo";
+            const string runtimeRepo = "runtime-repo";
+            const string sdkRepo = "sdk-repo";
+            const string aspnetRepo = "aspnet-repo";
+            const string otherRepo = "other-repo";
+            const string runtimeDepsDockerfilePath = "runtime-deps/Dockerfile";
+            const string runtimeDockerfilePath = "runtime/Dockerfile";
+            const string sdkDockerfilePath = "sdk/Dockerfile";
+            const string aspnetDockerfilePath = "aspnet/Dockerfile";
+            const string otherDockerfilePath = "other/Dockerfile";
+            const string baseImage = "base1";
+            const string baseImageDigest = "sha256:base1digest";
+            const string otherImage = "other";
+            const string otherImageDigest = "sha256:otherDigest";
+
+            SubscriptionInfo[] subscriptionInfos = new SubscriptionInfo[]
+            {
+                new SubscriptionInfo(
+                    CreateSubscription("repo1"),
+                    CreateManifest(
+                        CreateRepo(
+                            runtimeDepsRepo,
+                            CreateImage(
+                                CreatePlatform(runtimeDepsDockerfilePath, new string[] { "tag1" }))),
+                        CreateRepo(
+                            runtimeRepo,
+                            CreateImage(
+                                CreatePlatformWithRepoBuildArg(runtimeDockerfilePath, runtimeDepsRepo, new string[] { "tag1" }))),
+                        CreateRepo(
+                            sdkRepo,
+                            CreateImage(
+                                CreatePlatformWithRepoBuildArg(sdkDockerfilePath, runtimeRepo, new string[] { "tag1" }))),
+                        CreateRepo(
+                            aspnetRepo,
+                            CreateImage(
+                                CreatePlatformWithRepoBuildArg(aspnetDockerfilePath, runtimeRepo, new string[] { "tag1" }))),
+                        CreateRepo(
+                            otherRepo,
+                            CreateImage(
+                                CreatePlatform(otherDockerfilePath, new string[] { "tag1" }))))
+                )
+            };
+
+            Dictionary<GitFile, List<DockerfileInfo>> dockerfileInfos = new()
+            {
+                {
+                    subscriptionInfos[0].Subscription.Manifest,
+                    new List<DockerfileInfo>
+                    {
+                        new DockerfileInfo(runtimeDepsDockerfilePath, new FromImageInfo(baseImage, baseImageDigest)),
+                        new DockerfileInfo(runtimeDockerfilePath, new FromImageInfo($"{runtimeDepsRepo}:tag1", null)),
+                        new DockerfileInfo(sdkDockerfilePath, new FromImageInfo($"{aspnetRepo}:tag1", null)),
+                        new DockerfileInfo(aspnetDockerfilePath, new FromImageInfo($"{runtimeRepo}:tag1", null)),
+                        new DockerfileInfo(otherDockerfilePath, new FromImageInfo(otherImage, otherImageDigest))
+                    }
+                }
+            };
+
+            List<List<SubscriptionRebuildInfo>> allSubscriptionImagePaths = new()
+            {
+                new List<SubscriptionRebuildInfo>
+                {
+                    new SubscriptionRebuildInfo
+                    {
+                        SubscriptionId = subscriptionInfos[0].Subscription.Id,
+                        ImageRebuildInfos = new List<ImageRebuildInfo>
+                        {
+                            new ImageRebuildInfo
+                            {
+                                DockerfilePath = runtimeDepsDockerfilePath,
+                                Reasons = new List<ImageRebuildReason>
+                                {
+                                    new ImageRebuildReason
+                                    {
+                                        ReasonType = ImageRebuildReasonType.BaseImageChange
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            };
+
+            TestContext context = new(allSubscriptionImagePaths, subscriptionInfos, dockerfileInfos);
+            await context.ExecuteCommandAsync();
+
+            Dictionary<Subscription, IList<string>> expectedPathsBySubscription = new()
+            {
+                {
+                    subscriptionInfos[0].Subscription,
+                    new List<string>
+                    {
+                        runtimeDepsDockerfilePath,
+                        runtimeDockerfilePath,
+                        aspnetDockerfilePath,
+                        sdkDockerfilePath,
+                    }
+                }
+            };
+
+            context.Verify(notificationPostCallCount: 1, isQueuedBuildExpected: true, expectedPathsBySubscription);
+        }
+
+        /// <summary>
         /// Verifies that no build will be queued if no paths are specified.
         /// </summary>
         [Fact]
         public async Task QueueBuildCommand_NoBaseImageChange()
         {
-            Subscription[] subscriptions = new Subscription[]
+            const string repo = "repo1";
+            const string dockerfile1Path = "dockerfile1/Dockerfile";
+
+            SubscriptionInfo[] subscriptionInfos = new SubscriptionInfo[]
             {
-                CreateSubscription("repo1")
+                new SubscriptionInfo(
+                    CreateSubscription(repo),
+                    CreateManifest(
+                        CreateRepo(
+                            repo,
+                            CreateImage(
+                                CreatePlatform(dockerfile1Path, new string[] { "tag1" })))))
             };
 
-            List<List<SubscriptionImagePaths>> allSubscriptionImagePaths = new List<List<SubscriptionImagePaths>>
+            Dictionary<GitFile, List<DockerfileInfo>> dockerfileInfos = new()
             {
-                new List<SubscriptionImagePaths>
                 {
-                    new SubscriptionImagePaths
+                    subscriptionInfos[0].Subscription.Manifest,
+                    new List<DockerfileInfo>
                     {
-                        SubscriptionId = subscriptions[0].Id,
-                        ImagePaths = Array.Empty<string>()
-                    }
-                },
-                new List<SubscriptionImagePaths>
-                {
-                    new SubscriptionImagePaths
-                    {
-                        SubscriptionId = subscriptions[0].Id,
-                        ImagePaths = Array.Empty<string>()
+                        new DockerfileInfo(dockerfile1Path, new FromImageInfo("base1", "sha256:base1digest"))
                     }
                 }
             };
 
-            using (TestContext context = new TestContext(subscriptions, allSubscriptionImagePaths))
+            List<List<SubscriptionRebuildInfo>> allSubscriptionImagePaths = new()
+            {
+                new List<SubscriptionRebuildInfo>
+                {
+                    new SubscriptionRebuildInfo
+                    {
+                        SubscriptionId = subscriptionInfos[0].Subscription.Id
+                    }
+                },
+                new List<SubscriptionRebuildInfo>
+                {
+                    new SubscriptionRebuildInfo
+                    {
+                        SubscriptionId = subscriptionInfos[0].Subscription.Id
+                    }
+                }
+            };
+
+            using (TestContext context = new TestContext(allSubscriptionImagePaths, subscriptionInfos, dockerfileInfos))
             {
                 await context.ExecuteCommandAsync();
 
@@ -357,62 +668,208 @@ namespace Microsoft.DotNet.ImageBuilder.Tests
         [Fact]
         public async Task QueueBuildCommand_Subscription_MultiSet()
         {
-            const string path1 = "path1";
-            const string path2 = "path2";
-            const string path3 = "path3";
+            const string repo = "repo1";
+            const string dockerfile1Path = "dockerfile1/Dockerfile";
+            const string dockerfile2Path = "dockerfile2/Dockerfile";
+            const string dockerfile3Path = "dockerfile3/Dockerfile";
 
-            Subscription[] subscriptions = new Subscription[]
+            SubscriptionInfo[] subscriptionInfos = new SubscriptionInfo[]
             {
-                CreateSubscription("repo1")
+                new SubscriptionInfo(
+                    CreateSubscription(repo),
+                    CreateManifest(
+                        CreateRepo(
+                            repo,
+                            CreateImage(
+                                CreatePlatform(dockerfile1Path, new string[] { "tag1" }),
+                                CreatePlatform(dockerfile2Path, new string[] { "tag2" }),
+                                CreatePlatform(dockerfile3Path, new string[] { "tag3" })))))
             };
 
-            List<List<SubscriptionImagePaths>> allSubscriptionImagePaths = new List<List<SubscriptionImagePaths>>
+            Dictionary<GitFile, List<DockerfileInfo>> dockerfileInfos = new()
             {
-                new List<SubscriptionImagePaths>
                 {
-                    new SubscriptionImagePaths
+                    subscriptionInfos[0].Subscription.Manifest,
+                    new List<DockerfileInfo>
                     {
-                        SubscriptionId = subscriptions[0].Id,
-                        ImagePaths = new string[]
+                        new DockerfileInfo(dockerfile1Path, new FromImageInfo("base1", "sha256:base1digest")),
+                        new DockerfileInfo(dockerfile2Path, new FromImageInfo("base1", "sha256:base1digest")),
+                        new DockerfileInfo(dockerfile3Path, new FromImageInfo("base1", "sha256:base1digest"))
+                    }
+                }
+            };
+
+            List<List<SubscriptionRebuildInfo>> allSubscriptionImagePaths = new List<List<SubscriptionRebuildInfo>>
+            {
+                new List<SubscriptionRebuildInfo>
+                {
+                    new SubscriptionRebuildInfo
+                    {
+                        SubscriptionId = subscriptionInfos[0].Subscription.Id,
+                        ImageRebuildInfos = new List<ImageRebuildInfo>
                         {
-                            path1,
-                            path2
+                            new ImageRebuildInfo
+                            {
+                                DockerfilePath = dockerfile1Path,
+                                Reasons = new List<ImageRebuildReason>
+                                {
+                                    new ImageRebuildReason
+                                    {
+                                        ReasonType = ImageRebuildReasonType.BaseImageChange
+                                    }
+                                }
+                            },
+                            new ImageRebuildInfo
+                            {
+                                DockerfilePath = dockerfile2Path,
+                                Reasons = new List<ImageRebuildReason>
+                                {
+                                    new ImageRebuildReason
+                                    {
+                                        ReasonType = ImageRebuildReasonType.BaseImageChange
+                                    }
+                                }
+                            }
                         }
                     }
                 },
-                new List<SubscriptionImagePaths>
+                new List<SubscriptionRebuildInfo>
                 {
-                    new SubscriptionImagePaths
+                    new SubscriptionRebuildInfo
                     {
-                        SubscriptionId = subscriptions[0].Id,
-                        ImagePaths = new string[]
+                        SubscriptionId = subscriptionInfos[0].Subscription.Id,
+                        ImageRebuildInfos = new List<ImageRebuildInfo>
                         {
-                            path3
+                            new ImageRebuildInfo
+                            {
+                                DockerfilePath = dockerfile3Path,
+                                Reasons = new List<ImageRebuildReason>
+                                {
+                                    new ImageRebuildReason
+                                    {
+                                        ReasonType = ImageRebuildReasonType.BaseImageChange
+                                    }
+                                }
+                            }
                         }
                     }
                 }
             };
 
-            using (TestContext context = new TestContext(subscriptions, allSubscriptionImagePaths))
+            using (TestContext context = new(allSubscriptionImagePaths, subscriptionInfos, dockerfileInfos))
             {
                 await context.ExecuteCommandAsync();
 
-                Dictionary<Subscription, IList<string>> expectedPathsBySubscription =
-                    new Dictionary<Subscription, IList<string>>
+                Dictionary<Subscription, IList<string>> expectedPathsBySubscription = new()
                 {
                     {
-                        subscriptions[0],
+                        subscriptionInfos[0].Subscription,
                         new List<string>
                         {
-                            path1,
-                            path2,
-                            path3
+                            dockerfile1Path,
+                            dockerfile2Path,
+                            dockerfile3Path
                         }
                     }
                 };
 
                 context.Verify(notificationPostCallCount: 1, isQueuedBuildExpected: true, expectedPathsBySubscription);
             }
+        }
+
+        /// <summary>
+        /// Verifies the expected behavior due to an image's rebuild reason.
+        /// </summary>
+        [Theory]
+        [InlineData(ImageRebuildReasonType.BaseImageChange, null, false, true)]
+        [InlineData(ImageRebuildReasonType.BaseImageChange, null, true, true)]
+        [InlineData(ImageRebuildReasonType.UpgradablePackage, null, false, false)]
+        [InlineData(ImageRebuildReasonType.UpgradablePackage, null, true, true)]
+        [InlineData(ImageRebuildReasonType.UpgradablePackage, ImageRebuildReasonType.BaseImageChange, false, true)]
+        [InlineData(ImageRebuildReasonType.UpgradablePackage, ImageRebuildReasonType.BaseImageChange, true, true)]
+        public async Task QueueBuildCommand_RebuildReasons(
+            ImageRebuildReasonType reason1, ImageRebuildReasonType? reason2, bool enableUpgradablePackages, bool isQueuedBuildExpected)
+        {
+            const string repo = "repo1";
+            const string dockerfile1Path = "dockerfile1/Dockerfile";
+
+            SubscriptionInfo[] subscriptionInfos = new SubscriptionInfo[]
+            {
+                new SubscriptionInfo(
+                    CreateSubscription(repo),
+                    CreateManifest(
+                        CreateRepo(
+                            repo,
+                            CreateImage(
+                                CreatePlatform(dockerfile1Path, new string[] { "tag1" })))))
+            };
+
+            Dictionary<GitFile, List<DockerfileInfo>> dockerfileInfos = new()
+            {
+                {
+                    subscriptionInfos[0].Subscription.Manifest,
+                    new List<DockerfileInfo>
+                    {
+                        new DockerfileInfo(dockerfile1Path, new FromImageInfo("base1", "sha256:base1digest"))
+                    }
+                }
+            };
+
+            List<ImageRebuildReason> reasons = new()
+            {
+                new ImageRebuildReason
+                {
+                    ReasonType = reason1
+                }
+            };
+
+            if (reason2 is not null)
+            {
+                reasons.Add(
+                    new ImageRebuildReason
+                    {
+                        ReasonType = reason2.Value
+                    });
+            }
+
+            List<List<SubscriptionRebuildInfo>> allSubscriptionImagePaths = new()
+            {
+                new List<SubscriptionRebuildInfo>
+                {
+                    new SubscriptionRebuildInfo
+                    {
+                        SubscriptionId = subscriptionInfos[0].Subscription.Id,
+                        ImageRebuildInfos = new List<ImageRebuildInfo>
+                        {
+                            new ImageRebuildInfo
+                            {
+                                DockerfilePath = dockerfile1Path,
+                                Reasons = reasons
+                            }
+                        }
+                    }
+                }
+            };
+
+            TestContext context = new(allSubscriptionImagePaths, subscriptionInfos, dockerfileInfos);
+            context.Command.Options.EnableUpgradablePackages = enableUpgradablePackages;
+
+            await context.ExecuteCommandAsync();
+
+            Dictionary<Subscription, IList<string>> expectedPathsBySubscription = new();
+            if (isQueuedBuildExpected)
+            {
+                expectedPathsBySubscription[subscriptionInfos[0].Subscription] =
+                    new List<string>
+                    {
+                        dockerfile1Path
+                    };
+            }
+
+            context.Verify(
+                notificationPostCallCount: 1,
+                isQueuedBuildExpected: isQueuedBuildExpected,
+                expectedPathsBySubscription);
         }
 
         /// <summary>
@@ -467,51 +924,57 @@ namespace Microsoft.DotNet.ImageBuilder.Tests
         /// </summary>
         private class TestContext : IDisposable
         {
-            private readonly PagedList<WebApi.Build> inProgressBuilds;
-            private readonly PagedList<WebApi.Build> allBuilds;
-            private readonly List<string> filesToCleanup = new List<string>();
-            private readonly List<string> foldersToCleanup = new List<string>();
-            private readonly string subscriptionsPath;
-            private readonly Mock<IBuildHttpClient> buildHttpClientMock;
-            private readonly QueueBuildCommand command;
-            private readonly IEnumerable<IEnumerable<SubscriptionImagePaths>> allSubscriptionImagePaths;
-            private readonly Mock<INotificationService> _notificationServiceMock;
-
             private const string BuildOrganization = "testOrg";
             private const string GitOwner = "git-owner";
             private const string GitRepo = "git-repo";
             private const string GitAccessToken = "git-pat";
 
+            private readonly PagedList<WebApi.Build> inProgressBuilds;
+            private readonly PagedList<WebApi.Build> allBuilds;
+            private readonly List<string> filesToCleanup = new();
+            private readonly List<string> foldersToCleanup = new();
+            private readonly string subscriptionsPath;
+            private readonly Mock<IBuildHttpClient> buildHttpClientMock;
+            private readonly IEnumerable<IEnumerable<SubscriptionRebuildInfo>> allSubscriptionImagePaths;
+            private readonly SubscriptionInfo[] _subscriptionInfos;
+            private readonly Dictionary<GitFile, List<DockerfileInfo>> _dockerfileInfos;
+            private readonly Mock<INotificationService> _notificationServiceMock;
+
+            public QueueBuildCommand Command { get; }
+
             /// <summary>
             /// Initializes a new instance of <see cref="TestContext"/>.
             /// </summary>
-            /// <param name="subscriptions">The set of subscription metadata describing the Git repos that are listening for changes to base images.</param>
             /// <param name="allSubscriptionImagePaths">Multiple sets of mappings between subscriptions and their associated image paths.</param>
             public TestContext(
-                Subscription[] subscriptions,
-                IEnumerable<IEnumerable<SubscriptionImagePaths>> allSubscriptionImagePaths)
-                : this(subscriptions, allSubscriptionImagePaths, new PagedList<WebApi.Build>(), new PagedList<WebApi.Build>())
+                IEnumerable<IEnumerable<SubscriptionRebuildInfo>> allSubscriptionImagePaths,
+                SubscriptionInfo[] subscriptionInfos,
+                Dictionary<GitFile, List<DockerfileInfo>> dockerfileInfos)
+                : this(allSubscriptionImagePaths, subscriptionInfos, dockerfileInfos,
+                      new PagedList<WebApi.Build>(), new PagedList<WebApi.Build>())
             {
             }
 
             /// <summary>
             /// Initializes a new instance of <see cref="TestContext"/>.
             /// </summary>
-            /// <param name="subscriptions">The set of subscription metadata describing the Git repos that are listening for changes to base images.</param>
             /// <param name="allSubscriptionImagePaths">Multiple sets of mappings between subscriptions and their associated image paths.</param>
             /// <param name="inProgressBuilds">The set of in-progress builds that should be configured.</param>
             /// <param name="allBuilds">The set of failed builds that should be configured.</param>
             public TestContext(
-            Subscription[] subscriptions,
-            IEnumerable<IEnumerable<SubscriptionImagePaths>> allSubscriptionImagePaths,
-            PagedList<WebApi.Build> inProgressBuilds,
-            PagedList<WebApi.Build> allBuilds)
+                IEnumerable<IEnumerable<SubscriptionRebuildInfo>> allSubscriptionImagePaths,
+                SubscriptionInfo[] subscriptionInfos,
+                Dictionary<GitFile, List<DockerfileInfo>> dockerfileInfos,
+                PagedList<WebApi.Build> inProgressBuilds,
+                PagedList<WebApi.Build> allBuilds)
             {
                 this.allSubscriptionImagePaths = allSubscriptionImagePaths;
+                _subscriptionInfos = subscriptionInfos;
+                _dockerfileInfos = dockerfileInfos;
                 this.inProgressBuilds = inProgressBuilds;
                 this.allBuilds = allBuilds;
 
-                this.subscriptionsPath = this.SerializeJsonObjectToTempFile(subscriptions);
+                this.subscriptionsPath = this.SerializeJsonObjectToTempFile(_subscriptionInfos.Select(info => info.Subscription).ToList());
 
                 TeamProject project = new TeamProject
                 {
@@ -525,12 +988,12 @@ namespace Microsoft.DotNet.ImageBuilder.Tests
 
                 _notificationServiceMock = new Mock<INotificationService>();
 
-                this.command = this.CreateCommand(connectionFactoryMock);
+                this.Command = this.CreateCommand(connectionFactoryMock);
             }
 
             public Task ExecuteCommandAsync()
             {
-                return this.command.ExecuteAsync();
+                return this.Command.ExecuteAsync();
             }
 
             /// <summary>
@@ -587,8 +1050,17 @@ namespace Microsoft.DotNet.ImageBuilder.Tests
             private QueueBuildCommand CreateCommand(Mock<IVssConnectionFactory> connectionFactoryMock)
             {
                 Mock<ILoggerService> loggerServiceMock = new();
+                
+                IHttpClientProvider httpClientProvider = Helpers.Subscriptions.SubscriptionHelper.CreateHttpClientFactory(
+                    _subscriptionInfos, _dockerfileInfos, () =>
+                    {
+                        string tempDir = Directory.CreateDirectory(
+                            Path.Combine(Path.GetTempPath(), Path.GetRandomFileName())).FullName;
+                        this.foldersToCleanup.Add(tempDir);
+                        return tempDir;
+                    });
 
-                QueueBuildCommand command = new(connectionFactoryMock.Object, loggerServiceMock.Object, _notificationServiceMock.Object);
+                QueueBuildCommand command = new(connectionFactoryMock.Object, loggerServiceMock.Object, _notificationServiceMock.Object, httpClientProvider);
                 command.Options.AzdoOptions.Organization = BuildOrganization;
                 command.Options.AzdoOptions.AccessToken = "testToken";
                 command.Options.SubscriptionsPath = this.subscriptionsPath;

@@ -6,6 +6,7 @@ using System;
 using System.Collections.Generic;
 using Microsoft.DotNet.ImageBuilder.Models.Manifest;
 
+#nullable enable
 namespace Microsoft.DotNet.ImageBuilder
 {
     public interface IDockerService
@@ -14,7 +15,7 @@ namespace Microsoft.DotNet.ImageBuilder
 
         void PullImage(string image, bool isDryRun);
 
-        string GetImageDigest(string image, bool isDryRun);
+        string? GetImageDigest(string image, bool isDryRun);
 
         IEnumerable<string> GetImageManifestLayers(string image, bool isDryRun);
 
@@ -30,6 +31,13 @@ namespace Microsoft.DotNet.ImageBuilder
             bool isRetryEnabled,
             bool isDryRun);
 
+        string Run(string image, string command, string? name = null, bool skipAutoCleanup = false, string? entrypoint = null,
+            IDictionary<string, string>? volumeMounts = null, bool isDryRun = false);
+
+        void Copy(string src, string dst, bool isDryRun);
+
+        void DeleteContainer(string containerName, bool isDryRun);
+
         bool LocalImageExists(string tag, bool isDryRun);
 
         long GetImageSize(string image, bool isDryRun);
@@ -37,3 +45,4 @@ namespace Microsoft.DotNet.ImageBuilder
         DateTime GetCreatedDate(string image, bool isDryRun);
     }
 }
+#nullable disable

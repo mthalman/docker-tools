@@ -16,6 +16,8 @@ namespace Microsoft.DotNet.ImageBuilder.Commands
         public AzdoOptions AzdoOptions { get; set; } = new();
         public IEnumerable<string> AllSubscriptionImagePaths { get; set; } = Enumerable.Empty<string>();
         public GitOptions GitOptions { get; set; } = new();
+        public bool EnableUpgradablePackages { get; set; }
+        public string SourceUrl { get; set; } = string.Empty;
     }
 
     public class QueueBuildOptionsBuilder : CliOptionsBuilder
@@ -35,16 +37,25 @@ namespace Microsoft.DotNet.ImageBuilder.Commands
                     new Option[]
                     {
                         CreateOption("subscriptions-path", nameof(QueueBuildOptions.SubscriptionsPath),
-                            $"Path to the subscriptions file (defaults to '{DefaultSubscriptionsPath}').", DefaultSubscriptionsPath),
+                            $"Path to the subscriptions file", DefaultSubscriptionsPath),
                         CreateMultiOption<string>("image-paths", nameof(QueueBuildOptions.AllSubscriptionImagePaths),
-                            "JSON string mapping a subscription ID to the image paths to be built (from the output variable of getStaleImages)")
+                            "JSON string mapping a subscription ID to the image paths to be built (from the output variable of getStaleImages)"),
+                        CreateOption("enable-upgradable-pkgs", nameof(QueueBuildOptions.EnableUpgradablePackages),
+                            "Allows a build to be queued for a Dockerfile path whose only rebuild reason is an upgradable package", false),
                     }
                 .Concat(_gitOptionsBuilder.GetCliOptions()));
 
         public override IEnumerable<Argument> GetCliArguments() =>
             base.GetCliArguments()
                 .Concat(_azdoOptionsBuilder.GetCliArguments())
-                .Concat(_gitOptionsBuilder.GetCliArguments());
+                .Concat(_gitOptionsBuilder.GetCliArguments())
+                .Concat(new Argument[]
+                {
+                    new Argument(nameof(QueueBuildOptions.SourceUrl))
+                    {
+                        Description = "URL of the build that is executing the queue command"
+                    }
+                });
     }
 }
 #nullable disable

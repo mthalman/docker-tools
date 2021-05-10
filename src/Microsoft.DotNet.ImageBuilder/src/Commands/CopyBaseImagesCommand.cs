@@ -36,7 +36,7 @@ namespace Microsoft.DotNet.ImageBuilder.Commands
             // This command can be used either locally from a product repo or from an external repo that references
             // a subscription file. If a subscription file is being used, don't attempt to load the manifest because
             // one may not exist (it wouldn't be used even if it did exist).
-            if (Options.SubscriptionOptions.SubscriptionsPath is null)
+            if (string.IsNullOrEmpty(Options.SubscriptionOptions.SubscriptionsPath))
             {
                 base.LoadManifest();
             }
@@ -48,7 +48,7 @@ namespace Microsoft.DotNet.ImageBuilder.Commands
 
             IEnumerable<ManifestInfo> manifests;
             string fullRegistryName;
-            if (Options.SubscriptionOptions.SubscriptionsPath is null)
+            if (string.IsNullOrEmpty(Options.SubscriptionOptions.SubscriptionsPath))
             {
                 manifests = new ManifestInfo[] { Manifest };
                 fullRegistryName = Manifest.Registry;

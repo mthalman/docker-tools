@@ -18,5 +18,21 @@ namespace Microsoft.DotNet.ImageBuilder.ViewModel
             return new PlatformInfo[] {parent}
                 .Concat(dependencies.SelectMany(child => child.GetDependencyGraph(allPlatforms)));
         }
+
+        public static IEnumerable<PlatformInfo> GetAncestors(
+            this PlatformInfo platform, IEnumerable<PlatformInfo> allPlatforms)
+        {
+            IEnumerable<PlatformInfo> parents = allPlatforms
+                .Where(platform => platform.Tags.Any(tag => platform.InternalFromImages.Contains(tag.FullyQualifiedName)));
+
+            foreach (PlatformInfo parent in parents)
+            {
+                yield return parent;
+                foreach (PlatformInfo ancestor in parent.GetAncestors(allPlatforms))
+                {
+                    yield return ancestor;
+                }
+            }
+        }
     }
 }

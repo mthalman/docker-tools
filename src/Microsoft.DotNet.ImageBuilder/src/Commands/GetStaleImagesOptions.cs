@@ -11,21 +11,24 @@ namespace Microsoft.DotNet.ImageBuilder.Commands
 {
     public class GetStaleImagesOptions : Options, IFilterableOptions, IGitOptionsHost
     {
-        public ManifestFilterOptions FilterOptions { get; set; } = new ManifestFilterOptions();
+        public ManifestFilterOptions FilterOptions { get; set; } = new();
 
-        public GitOptions GitOptions { get; set; } = new GitOptions();
+        public GitOptions GitOptions { get; set; } = new();
 
-        public SubscriptionOptions SubscriptionOptions { get; set; } = new SubscriptionOptions();
+        public SubscriptionOptions SubscriptionOptions { get; set; } = new();
 
         public string VariableName { get; set; } = string.Empty;
+
+        public string GetInstalledPackagesScriptPath { get; set; } = string.Empty;
+
+        public string GetUpgradablePackagesScriptPath { get; set; } = string.Empty;
     }
 
     public class GetStaleImagesOptionsBuilder : CliOptionsBuilder
     {
         private readonly GitOptionsBuilder _gitOptionsBuilder = GitOptionsBuilder.BuildWithDefaults();
-        private readonly ManifestFilterOptionsBuilder _manifestFilterOptionsBuilder =
-            new ManifestFilterOptionsBuilder();
-        private readonly SubscriptionOptionsBuilder _subscriptionOptionsBuilder = new SubscriptionOptionsBuilder();
+        private readonly ManifestFilterOptionsBuilder _manifestFilterOptionsBuilder = new();
+        private readonly SubscriptionOptionsBuilder _subscriptionOptionsBuilder = new();
 
         public override IEnumerable<Option> GetCliOptions() =>
             base.GetCliOptions()
@@ -42,7 +45,11 @@ namespace Microsoft.DotNet.ImageBuilder.Commands
                     new Argument[]
                     {
                         new Argument<string>(nameof(GetStaleImagesOptions.VariableName),
-                            "The Azure Pipeline variable name to assign the image paths to")
+                            "The Azure Pipeline variable name to assign the image paths to"),
+                        new Argument<string>(nameof(GetStaleImagesOptions.GetInstalledPackagesScriptPath),
+                            "Path to the script file that outputs list of installed packages"),
+                        new Argument<string>(nameof(GetStaleImagesOptions.GetUpgradablePackagesScriptPath),
+                            "Path to the script file that outputs list of upgradable packages")
                     });
     }
 }

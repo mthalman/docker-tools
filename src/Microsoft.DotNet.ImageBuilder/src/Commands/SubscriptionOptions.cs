@@ -11,7 +11,7 @@ namespace Microsoft.DotNet.ImageBuilder.Commands
 {
     public class SubscriptionOptions
     {
-        public string? SubscriptionsPath { get; set; }
+        public string SubscriptionsPath { get; set; } = "";
     }
 
     public class SubscriptionOptionsBuilder
