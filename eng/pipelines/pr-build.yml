@@ -1,0 +1,17 @@
+# Required variables to be defined in build definition and their default values:
+#  - imageBuilder.pathArgs: <empty>
+#  - imageBuilder.queueArgs: <empty>
+#  - publishRepoPrefix: test/
+#  - sourceBuildId: $(Build.BuildId)
+#  - stages: build;publish
+
+pr: main
+trigger: none
+
+variables:
+- template: templates/variables/common.yml
+
+stages:
+- template: ../common/templates/stages/build-test-publish-repo.yml
+  parameters:
+    buildMatrixType: platformVersionedOs

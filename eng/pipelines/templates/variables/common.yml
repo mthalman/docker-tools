@@ -1,8 +1,10 @@
 variables:
 - template: ../../../common/templates/variables/common.yml
-- name: checkBaseImageSubscriptionsPath
-  value: eng/check-base-image-subscriptions.json
 - name: publicGitRepoUri
-  value: https://github.com/dotnet/docker-tools
-- name: imageNames.pinger.linux
-  value: arm32v7/debian:stretch
+  value: https://github.com/org/repo
+- name: manifest
+  value: manifest.json
+- name: testScriptPath
+  value: ./tests/run-tests.ps1
+- name: testResultsDirectory
+  value: src/tests/TestResults/

@@ -1,0 +1,3 @@
+$(McrTagsYmlRepo:product)
+$(McrTagsYmlTagGroup:focal)
+$(McrTagsYmlTagGroup:nanoserver-1809)

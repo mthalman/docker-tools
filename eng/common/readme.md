@@ -1,28 +1,3 @@
-# Don't touch this folder
+# eng/common Folder
 
-                uuuuuuuuuuuuuuuuuuuu
-              u" uuuuuuuuuuuuuuuuuu "u
-            u" u$$$$$$$$$$$$$$$$$$$$u "u
-          u" u$$$$$$$$$$$$$$$$$$$$$$$$u "u
-        u" u$$$$$$$$$$$$$$$$$$$$$$$$$$$$u "u
-      u" u$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$u "u
-    u" u$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$u "u
-    $ $$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$ $
-    $ $$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$ $
-    $ $$$" ... "$...  ...$" ... "$$$  ... "$$$ $
-    $ $$$u `"$$$$$$$  $$$  $$$$$  $$  $$$  $$$ $
-    $ $$$$$$uu "$$$$  $$$  $$$$$  $$  """ u$$$ $
-    $ $$$""$$$  $$$$  $$$u "$$$" u$$  $$$$$$$$ $
-    $ $$$$....,$$$$$..$$$$$....,$$$$..$$$$$$$$ $
-    $ $$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$ $
-    "u "$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$" u"
-      "u "$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$" u"
-        "u "$$$$$$$$$$$$$$$$$$$$$$$$$$$$" u"
-          "u "$$$$$$$$$$$$$$$$$$$$$$$$" u"
-            "u "$$$$$$$$$$$$$$$$$$$$" u"
-              "u """""""""""""""""" u"
-                """"""""""""""""""""
-
-!!! Changes made in this directory are subject to being overwritten by automation !!!
-
-The files in this directory are shared by all .NET Docker repos. If you need to make changes to these files, open an issue or submit a pull request in https://github.com/dotnet/docker-tools.
+This folder should updated to contain the contents of https://github.com/dotnet/docker-tools/tree/main/eng/common which is regularly updated.
