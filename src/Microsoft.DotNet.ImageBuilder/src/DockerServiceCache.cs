@@ -7,6 +7,7 @@ using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
+using Microsoft.DotNet.ImageBuilder.Commands;
 using Microsoft.DotNet.ImageBuilder.Models.Manifest;
 
 #nullable enable
@@ -36,9 +37,9 @@ namespace Microsoft.DotNet.ImageBuilder
         public Architecture Architecture => _inner.Architecture;
 
         public string? BuildImage(
-            string dockerfilePath, string buildContextPath, string platform, IEnumerable<string> tags,
+            string dockerfilePath, string buildContextPath, string platform, Isolation isolation, IEnumerable<string> tags,
             IDictionary<string, string?> buildArgs, bool isRetryEnabled, bool isDryRun) =>
-            _inner.BuildImage(dockerfilePath, buildContextPath, platform, tags, buildArgs, isRetryEnabled, isDryRun);
+            _inner.BuildImage(dockerfilePath, buildContextPath, platform, isolation, tags, buildArgs, isRetryEnabled, isDryRun);
 
         public (Architecture Arch, string? Variant) GetImageArch(string image, bool isDryRun) =>
             _architectureCache.GetOrAdd(image, _ =>_inner.GetImageArch(image, isDryRun));

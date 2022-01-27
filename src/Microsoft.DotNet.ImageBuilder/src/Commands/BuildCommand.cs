@@ -450,6 +450,7 @@ namespace Microsoft.DotNet.ImageBuilder.Commands
                     dockerfilePath,
                     platform.BuildContextPath,
                     platform.PlatformLabel,
+                    Options.Isolation,
                     allTags,
                     GetBuildArgs(platform),
                     Options.IsRetryEnabled,

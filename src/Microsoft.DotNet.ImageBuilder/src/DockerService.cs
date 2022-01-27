@@ -6,6 +6,7 @@ using System;
 using System.Collections.Generic;
 using System.ComponentModel.Composition;
 using System.Linq;
+using Microsoft.DotNet.ImageBuilder.Commands;
 using System.Threading.Tasks;
 using Microsoft.DotNet.ImageBuilder.Models.Manifest;
 
@@ -76,18 +77,20 @@ namespace Microsoft.DotNet.ImageBuilder
             string dockerfilePath,
             string buildContextPath,
             string platform,
+            Isolation isolation,
             IEnumerable<string> tags,
             IDictionary<string, string?> buildArgs,
             bool isRetryEnabled,
             bool isDryRun)
         {
             string tagArgs = $"-t {string.Join(" -t ", tags)}";
+            string isolationArg = $"--isolation {isolation.ToString().ToLowerInvariant()}";
 
             IEnumerable<string> buildArgList = buildArgs
                 .Select(buildArg => $" --build-arg {buildArg.Key}={buildArg.Value}");
             string buildArgsString = string.Join(string.Empty, buildArgList);
 
-            string dockerArgs = $"build --platform {platform} {tagArgs} -f {dockerfilePath}{buildArgsString} {buildContextPath}";
+            string dockerArgs = $"build --platform {platform} {isolationArg} {tagArgs} -f {dockerfilePath}{buildArgsString} {buildContextPath}";
 
             if (isRetryEnabled)
             {

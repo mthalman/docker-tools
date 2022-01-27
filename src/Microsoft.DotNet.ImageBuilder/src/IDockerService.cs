@@ -5,6 +5,7 @@
 using System;
 using System.Collections.Generic;
 using System.Threading.Tasks;
+using Microsoft.DotNet.ImageBuilder.Commands;
 using Microsoft.DotNet.ImageBuilder.Models.Manifest;
 
 #nullable enable
@@ -32,6 +33,7 @@ namespace Microsoft.DotNet.ImageBuilder
             string dockerfilePath,
             string buildContextPath,
             string platform,
+            Isolation isolation,
             IEnumerable<string> tags,
             IDictionary<string, string?> buildArgs,
             bool isRetryEnabled,

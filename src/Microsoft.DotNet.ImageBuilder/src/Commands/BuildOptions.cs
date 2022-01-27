@@ -29,6 +29,13 @@ namespace Microsoft.DotNet.ImageBuilder.Commands
         public ServicePrincipalOptions ServicePrincipal { get; set; } = new();
         public string? Subscription { get; set; }
         public string? ResourceGroup { get; set; }
+		public Isolation Isolation { get; set; }
+    }
+    
+    public enum Isolation
+    {
+        Process,
+        HyperV
     }
 
     public class BuildOptionsBuilder : DockerRegistryOptionsBuilder
@@ -75,6 +82,8 @@ namespace Microsoft.DotNet.ImageBuilder.Commands
                             "Azure subscription to operate on"),
                         CreateOption<string>("acr-resource-group", nameof(BuildOptions.ResourceGroup),
                             "Azure resource group to operate on"),
+                        CreateOption("isolation", nameof(BuildOptions.Isolation),
+                            "Path to the default script file that outputs list of installed packages", Isolation.Process),
                     });
 
         public override IEnumerable<Argument> GetCliArguments() =>
