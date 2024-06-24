@@ -19,7 +19,7 @@ namespace Microsoft.DotNet.ImageBuilder.Commands
 
         public bool ExcludeProductFamilyReadme { get; set; }
 
-        public string? RootPath { get; set; }
+        public List<string> DocPaths { get; set; } = [];
 
         public PublishMcrDocsOptions() : base()
         {
@@ -37,7 +37,7 @@ namespace Microsoft.DotNet.ImageBuilder.Commands
                     [
                         CreateOption<bool>("exclude-product-family", nameof(PublishMcrDocsOptions.ExcludeProductFamilyReadme),
                             "Excludes the product family readme from being published"),
-                        CreateOption<string>("root", nameof(PublishMcrDocsOptions.RootPath),
+                        CreateMultiOption<string>("doc-path", nameof(PublishMcrDocsOptions.DocPaths),
                             "Root path from which to copy readmes"),
                     ]);
 

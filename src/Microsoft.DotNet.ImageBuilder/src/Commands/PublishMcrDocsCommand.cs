@@ -10,7 +10,6 @@ using System.IO;
 using System.Linq;
 using System.Net.Http;
 using System.Threading.Tasks;
-using Microsoft.DotNet.ImageBuilder.Models.Manifest;
 using Microsoft.DotNet.ImageBuilder.ViewModel;
 using Microsoft.DotNet.VersionTools.Automation;
 using Microsoft.DotNet.VersionTools.Automation.GitHubApi;
@@ -77,7 +76,7 @@ namespace Microsoft.DotNet.ImageBuilder.Commands
         }
 
         private bool IncludeReadme(string readmePath) =>
-            Options.RootPath is null || Path.GetFullPath(readmePath).StartsWith(Path.GetFullPath(Options.RootPath));
+            Options.DocPaths.Count == 0 || Options.DocPaths.Any(path => Path.GetFullPath(readmePath).StartsWith(Path.GetFullPath(path)));
 
         private void ValidateReadmeFilenames(ManifestInfo manifest)
         {
