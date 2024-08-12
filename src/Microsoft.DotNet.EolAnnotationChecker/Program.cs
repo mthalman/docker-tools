@@ -1,5 +1,6 @@
 ﻿using System.Collections.Concurrent;
 using System.CommandLine;
+using System.Linq;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using System.Text.RegularExpressions;
@@ -41,7 +42,7 @@ void Execute(string outputPath, string repo)
 
 async Task ExecuteAsync(string outputPath, string repo)
 {
-    var kustoDigests = GetKustoData(repo).ToList().AsEnumerable();
+    Dictionary<string, DigestInfo> kustoDigests = GetKustoData(repo);
 
     var nonKustoDigests = await GetNonKustoDataAsync(repo, kustoDigests);
 
@@ -51,7 +52,7 @@ async Task ExecuteAsync(string outputPath, string repo)
 
     if (combine)
     {
-        digests = kustoDigests.Concat(nonKustoDigests);
+        digests = kustoDigests.Select(val => val.Value).Concat(nonKustoDigests);
     }
     else
     {
@@ -83,10 +84,8 @@ DateOnly? GetEolDate(Version version)
     return null;
 }
 
-async Task<IEnumerable<DigestInfo>> GetNonKustoDataAsync(string repoName, IEnumerable<DigestInfo> kustoRows)
+async Task<IEnumerable<DigestInfo>> GetNonKustoDataAsync(string repoName, Dictionary<string, DigestInfo> kustoRows)
 {
-    var kustoDigests = kustoRows.Select(row => row.Digest).ToHashSet();
-
     string queryRepoName = $"public/{repoName}";
     Uri registryUri = new("https://dotnetdocker.azurecr.io");
     ContainerRegistryClient client = new(registryUri, new DefaultAzureCredential());
@@ -101,7 +100,7 @@ async Task<IEnumerable<DigestInfo>> GetNonKustoDataAsync(string repoName, IEnume
     await Parallel.ForEachAsync(props, async (prop, cts) =>
     {
         string digest = $"{repoName}@{prop.Digest}";
-        if (!kustoDigests.Contains(digest) && await IsImageDigestAsync(contentClient, prop.Digest))
+        if (!kustoRows.ContainsKey(digest) && await IsImageDigestAsync(contentClient, prop.Digest))
         {
             var versionTag = prop.Tags.FirstOrDefault(tag => versionRegex.IsMatch(tag));
             if (versionTag is not null)
@@ -181,8 +180,9 @@ static async Task<IEnumerable<DigestInfo>> FilterAsync(IEnumerable<DigestInfo> v
     return results;
 }
 
-IEnumerable<DigestInfo> GetKustoData(string repoName)
+Dictionary<string, DigestInfo> GetKustoData(string repoName)
 {
+    Dictionary<string, DigestInfo> digests = new();
     const string clusterResource = "https://Dotnettel.kusto.windows.net";
     KustoConnectionStringBuilder connectionBuilder = new KustoConnectionStringBuilder(clusterResource)
         .WithAadAzCliAuthentication();
@@ -213,12 +213,27 @@ IEnumerable<DigestInfo> GetKustoData(string repoName)
         DateOnly? eolDate = GetEolDate(productVersion);
         if (eolDate is not null)
         {
-            yield return new DigestInfo(name, productVersion, eolDate.Value, dockerfile);
+            if (digests.TryGetValue(name, out DigestInfo? existing))
+            {
+                if (existing.EolDate > eolDate.Value)
+                {
+                    existing.EolDate = eolDate.Value;
+                }
+            }
+            else
+            {
+                digests.Add(name, new DigestInfo(name, productVersion, eolDate.Value, dockerfile));
+            }
         }
     }
+
+    return digests;
 }
 
-internal record DigestInfo(string Digest, Version? ProductVersion, DateOnly EolDate, string? Dockerfile);
+internal record DigestInfo(string Digest, Version? ProductVersion, DateOnly EolDate, string? Dockerfile)
+{
+    public DateOnly EolDate { get; set; } = EolDate;
+}
 
 public class EolDigestData
 {
