@@ -52,7 +52,9 @@ async Task ExecuteAsync(string outputPath, string repo)
 
     if (combine)
     {
-        digests = kustoDigests.Select(val => val.Value).Concat(nonKustoDigests);
+        digests = kustoDigests.Select(val => val.Value);
+        digests = await FilterNonMarDigestsAsync(digests);
+        digests = digests.Union(nonKustoDigests);
     }
     else
     {
@@ -61,7 +63,7 @@ async Task ExecuteAsync(string outputPath, string repo)
 
     digests = digests.OrderBy(row => row.Digest);
 
-    digests = await FilterAsync(digests);
+    digests = digests.OrderBy(row => row.Digest);
 
     EolAnnotationsData eolAnnotationsData = new();
     
@@ -153,7 +155,7 @@ static async Task<bool> IsImageDigestAsync(ContainerRegistryContentClient conten
     return manifestObj["subject"] is null;
 }
 
-static async Task<IEnumerable<DigestInfo>> FilterAsync(IEnumerable<DigestInfo> values)
+static async Task<IEnumerable<DigestInfo>> FilterNonMarDigestsAsync(IEnumerable<DigestInfo> values)
 {
     RegistryClient client = new("mcr.microsoft.com");
 
