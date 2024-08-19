@@ -63,11 +63,9 @@ async Task ExecuteAsync(string outputPath, string repo)
 
     digests = digests.OrderBy(row => row.Digest);
 
-    digests = digests.OrderBy(row => row.Digest);
-
     EolAnnotationsData eolAnnotationsData = new();
     
-    foreach (var digestInfo in digests.OrderBy(row => row.Digest))
+    foreach (var digestInfo in digests)
     {
         eolAnnotationsData.EolDigests.Add(new EolDigestData { Digest = digestInfo.Digest, EolDate = digestInfo.EolDate, Tags = [digestInfo.Dockerfile ?? digestInfo.ProductVersion?.ToString()] });
     }
@@ -121,13 +119,23 @@ async Task<IEnumerable<DigestInfo>> GetNonKustoDataAsync(string repoName, Dictio
             {
                 var manifestResult = await contentClient.GetManifestAsync(prop.Digest);
                 var manifest = manifestResult.Value.Manifest.ToObjectFromJson<JsonObject>();
-                string? configDigest = manifest["config"]?["digest"]?.ToString();
-                DownloadRegistryBlobResult configBlob = await contentClient.DownloadBlobContentAsync(configDigest);
-                var configJson = configBlob.Content.ToObjectFromJson<JsonObject>();
-                DateTime created = DateTime.Parse(configJson["created"].ToString());
+                var config = manifest["config"];
+                DateTimeOffset created;
+                if (config is not null)
+                {
+                    string? configDigest = manifest["config"]?["digest"]?.ToString();
+                    DownloadRegistryBlobResult configBlob = await contentClient.DownloadBlobContentAsync(configDigest);
+                    var configJson = configBlob.Content.ToObjectFromJson<JsonObject>();
+                    created = DateTimeOffset.Parse(configJson["created"].ToString());
+                }
+                else
+                {
+                    created = prop.CreatedOn;
+                }
+                
                 if (created < DateTime.UtcNow.AddMonths(-1))
                 {
-                    var eolDate = DateOnly.FromDateTime(created.AddMonths(1).ToUniversalTime());
+                    var eolDate = DateOnly.FromDateTime(created.AddMonths(1).UtcDateTime);
                     nonKustoDigests.Add(new DigestInfo($"{Registry}/public/{digest}", null, eolDate, Dockerfile: null));
                 }
             }
