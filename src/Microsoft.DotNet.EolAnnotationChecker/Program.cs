@@ -1,6 +1,7 @@
 ﻿using System.Collections.Concurrent;
 using System.CommandLine;
-using System.Linq;
+using System.Diagnostics;
+using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using System.Text.RegularExpressions;
@@ -8,8 +9,10 @@ using Azure.Containers.ContainerRegistry;
 using Azure.Identity;
 using Kusto.Data;
 using Kusto.Data.Net.Client;
+using Newtonsoft.Json;
 using Valleysoft.DockerRegistryClient;
 
+const string LifecycleArtifactType = "application/vnd.microsoft.artifact.lifecycle";
 Dictionary<string, DateOnly> eolDates = new()
 {
     { "7.0", new DateOnly(2024, 5, 14) },
@@ -61,7 +64,7 @@ async Task ExecuteAsync(string outputPath, string repo)
         digests = nonKustoDigests;
     }
 
-    digests = digests.OrderBy(row => row.Digest);
+    digests = FilterOutAnnotatedDigests(digests);
 
     digests = digests.OrderBy(row => row.Digest);
 
@@ -72,8 +75,67 @@ async Task ExecuteAsync(string outputPath, string repo)
         eolAnnotationsData.EolDigests.Add(new EolDigestData { Digest = digestInfo.Digest, EolDate = digestInfo.EolDate, Tags = [digestInfo.Dockerfile ?? digestInfo.ProductVersion?.ToString()] });
     }
 
-    string json = JsonSerializer.Serialize(eolAnnotationsData, new JsonSerializerOptions { WriteIndented = true });
+    string json = System.Text.Json.JsonSerializer.Serialize(eolAnnotationsData, new JsonSerializerOptions { WriteIndented = true });
     File.WriteAllText(outputPath, json);
+}
+
+static IEnumerable<DigestInfo> FilterOutAnnotatedDigests(IEnumerable<DigestInfo> digests)
+{
+    ConcurrentBag<DigestInfo> newDigests = [];
+    Parallel.ForEach(digests, (digest, _) =>
+    {
+        if (!IsAnnotated(digest.Digest))
+        {
+            newDigests.Add(digest);
+        }
+    });
+
+    return newDigests;
+}
+
+static bool IsAnnotated(string digest)
+{
+    ProcessStartInfo processInfo = new("oras", $"discover --artifact-type {LifecycleArtifactType} --format json {digest}");
+    processInfo.RedirectStandardOutput = true;
+    Process process = new()
+    {
+        EnableRaisingEvents = true,
+        StartInfo = processInfo
+    };
+
+    DataReceivedEventHandler getDataReceivedHandler(StringBuilder stringBuilder, TextWriter outputWriter)
+    {
+        return new DataReceivedEventHandler((sender, e) =>
+        {
+            string? line = e.Data;
+            if (line != null)
+            {
+                stringBuilder.AppendLine(line);
+                outputWriter.WriteLine(line);
+            }
+        });
+    }
+
+    StringBuilder stdOutput = new();
+    process.OutputDataReceived += getDataReceivedHandler(stdOutput, Console.Out);
+
+    process.Start();
+    process.BeginOutputReadLine();
+    process.WaitForExit();
+
+    string output = stdOutput.ToString();
+
+    return LifecycleAnnotationExists(output);
+}
+
+static bool LifecycleAnnotationExists(string json)
+{
+    OrasDiscoverData? orasDiscoverData = JsonConvert.DeserializeObject<OrasDiscoverData>(json);
+    if (orasDiscoverData?.Manifests != null)
+    {
+        return orasDiscoverData.Manifests.Where(m => m.ArtifactType == LifecycleArtifactType).Any();
+    }
+    return false;
 }
 
 DateOnly? GetEolDate(Version version)
@@ -261,4 +323,22 @@ public class EolAnnotationsData
     public DateOnly? EolDate { get; set; }
 
     public List<EolDigestData> EolDigests { get; set; } = [];
+}
+
+public class OrasDiscoverData
+{
+    public List<OciManifest>? Manifests { get; set; }
+
+    public OrasDiscoverData()
+    {
+    }
+}
+
+public class OciManifest
+{
+    public string? ArtifactType { get; set; }
+
+    public OciManifest()
+    {
+    }
 }
