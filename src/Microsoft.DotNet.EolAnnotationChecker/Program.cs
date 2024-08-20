@@ -8,6 +8,8 @@ using Azure.Containers.ContainerRegistry;
 using Azure.Identity;
 using Kusto.Data;
 using Kusto.Data.Net.Client;
+using Newtonsoft.Json;
+using Newtonsoft.Json.Linq;
 using Valleysoft.DockerRegistryClient;
 
 Dictionary<string, DateOnly> eolDates = new()
@@ -26,39 +28,46 @@ Dictionary<string, DateOnly> eolDates = new()
 RootCommand rootCmd = new("CLI for checking EOL annotations of .NET container images");
 var eolDataPathArg = new Argument<string>("--eol-data-path", "Path to the EOL data output file");
 var repoArg = new Argument<string>("--repo", "Repository name with wildcard support");
+var queryKustoOption = new Option<bool>("--kusto", "Query Kusto for existing EOL data");
+var imageInfoPathOption = new Option<string?>("--image-info-path", "Path to the image info file");
+var checkDotNetVersionOption = new Option<bool>("--check-dotnet-version", "Check the .NET version of the tag");
 rootCmd.AddArgument(eolDataPathArg);
 rootCmd.AddArgument(repoArg);
+rootCmd.AddOption(queryKustoOption);
+rootCmd.AddOption(imageInfoPathOption);
+rootCmd.AddOption(checkDotNetVersionOption);
 rootCmd.SetHandler(
     Execute,
     eolDataPathArg,
-    repoArg);
+    repoArg,
+    queryKustoOption,
+    imageInfoPathOption,
+    checkDotNetVersionOption);
 
 return rootCmd.Invoke(args);
 
-void Execute(string outputPath, string repo)
+void Execute(string outputPath, string repo, bool queryKusto, string? imageInfoPath, bool checkDotNetVersion)
 {
-    ExecuteAsync(outputPath, repo).Wait();
+    ExecuteAsync(outputPath, repo, queryKusto, imageInfoPath, checkDotNetVersion).Wait();
 }
 
-async Task ExecuteAsync(string outputPath, string repo)
+async Task ExecuteAsync(string outputPath, string repoName, bool queryKusto, string? imageInfoPath, bool checkDotNetVersion)
 {
-    Dictionary<string, DigestInfo> kustoDigests = GetKustoData(repo);
-
-    var nonKustoDigests = await GetNonKustoDataAsync(repo, kustoDigests);
-
-    bool combine = true;
-
-    IEnumerable<DigestInfo> digests;
-
-    if (combine)
+    Dictionary<string, DigestInfo> kustoDigests = [];
+    if (queryKusto)
     {
-        digests = kustoDigests.Select(val => val.Value);
-        digests = await FilterNonMarDigestsAsync(digests);
-        digests = digests.Union(nonKustoDigests);
+        kustoDigests = GetKustoData(repoName);
     }
-    else
+
+    var nonKustoDigests = await GetNonKustoDataAsync(repoName, kustoDigests, checkDotNetVersion);
+
+    IEnumerable<DigestInfo> digests = kustoDigests.Select(val => val.Value);
+    digests = await FilterNonMarDigestsAsync(digests);
+    digests = digests.Union(nonKustoDigests);
+
+    if (imageInfoPath is not null)
     {
-        digests = nonKustoDigests;
+        digests = FilterImageInfoDigests(digests, imageInfoPath, repoName);
     }
 
     digests = digests.OrderBy(row => row.Digest);
@@ -70,8 +79,31 @@ async Task ExecuteAsync(string outputPath, string repo)
         eolAnnotationsData.EolDigests.Add(new EolDigestData { Digest = digestInfo.Digest, EolDate = digestInfo.EolDate, Tags = [digestInfo.Dockerfile ?? digestInfo.ProductVersion?.ToString()] });
     }
 
-    string json = JsonSerializer.Serialize(eolAnnotationsData, new JsonSerializerOptions { WriteIndented = true });
+    string json = System.Text.Json.JsonSerializer.Serialize(eolAnnotationsData, new JsonSerializerOptions { WriteIndented = true });
     File.WriteAllText(outputPath, json);
+}
+
+IEnumerable<DigestInfo> FilterImageInfoDigests(IEnumerable<DigestInfo> digests, string imageInfoPath, string repoName)
+{
+    HashSet<string> imageInfoDigests = [];
+    JObject imageInfo = (JObject)JsonConvert.DeserializeObject(File.ReadAllText(imageInfoPath));
+    JObject repo = (JObject)imageInfo["repos"].First(repo => repo.ToString() == repoName);
+    foreach (JObject image in repo["images"])
+    {
+        if (image["manifest"] is not null)
+        {
+            string digest = image["manifest"]["digest"].ToString().Replace("mcr.microsoft.com", "dotnetdocker.azurecr.io/public");
+            imageInfoDigests.Add(digest);
+        }
+
+        foreach (JObject platform in image["platforms"])
+        {
+            string digest = platform["digest"].ToString().Replace("mcr.microsoft.com", "dotnetdocker.azurecr.io/public");
+            imageInfoDigests.Add(digest);
+        }
+    }
+
+    return digests.Where(digest => imageInfoDigests.Contains(digest.Digest));
 }
 
 DateOnly? GetEolDate(Version version)
@@ -84,7 +116,7 @@ DateOnly? GetEolDate(Version version)
     return null;
 }
 
-async Task<IEnumerable<DigestInfo>> GetNonKustoDataAsync(string repoName, Dictionary<string, DigestInfo> kustoRows)
+async Task<IEnumerable<DigestInfo>> GetNonKustoDataAsync(string repoName, Dictionary<string, DigestInfo> kustoRows, bool checkDotNetVersion)
 {
     string queryRepoName = $"public/{repoName}";
     const string Registry = "dotnetdocker.azurecr.io";
@@ -103,19 +135,24 @@ async Task<IEnumerable<DigestInfo>> GetNonKustoDataAsync(string repoName, Dictio
         string digest = $"{repoName}@{prop.Digest}";
         if (!kustoRows.ContainsKey(digest) && await IsImageDigestAsync(contentClient, prop.Digest))
         {
-            var versionTag = prop.Tags.FirstOrDefault(tag => versionRegex.IsMatch(tag));
-            if (versionTag is not null)
+            bool hasVersionTag = false;
+            if (checkDotNetVersion)
             {
-                var productVersion = new Version(versionRegex.Match(versionTag).Groups["version"].Value);
-
-                DateOnly? eolDate = GetEolDate(productVersion);
-                if (eolDate is not null)
+                var versionTag = prop.Tags.FirstOrDefault(tag => versionRegex.IsMatch(tag));
+                if (versionTag is not null)
                 {
-                    nonKustoDigests.Add(new DigestInfo($"{Registry}/public/{digest}", productVersion, eolDate.Value, null));
+                    hasVersionTag = true;
+                    var productVersion = new Version(versionRegex.Match(versionTag).Groups["version"].Value);
+
+                    DateOnly? eolDate = GetEolDate(productVersion);
+                    if (eolDate is not null)
+                    {
+                        nonKustoDigests.Add(new DigestInfo($"{Registry}/public/{digest}", productVersion, eolDate.Value, null));
+                    }
                 }
             }
-            // A dangling image might be supported. Check if it's older than a month.
-            else
+            
+            if (!hasVersionTag)
             {
                 var manifestResult = await contentClient.GetManifestAsync(prop.Digest);
                 var manifest = manifestResult.Value.Manifest.ToObjectFromJson<JsonObject>();
