@@ -12,6 +12,8 @@ using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using Valleysoft.DockerRegistryClient;
 
+ConcurrentBag<string> failedDigests = new();
+
 Dictionary<string, DateOnly> eolDates = new()
 {
     { "7.0", new DateOnly(2024, 5, 14) },
@@ -81,13 +83,22 @@ async Task ExecuteAsync(string outputPath, string repoName, bool queryKusto, str
 
     string json = System.Text.Json.JsonSerializer.Serialize(eolAnnotationsData, new JsonSerializerOptions { WriteIndented = true });
     File.WriteAllText(outputPath, json);
+
+    if (failedDigests.Count > 0)
+    {
+        Console.WriteLine("Failed digests:");
+        foreach (var digest in failedDigests)
+        {
+            Console.WriteLine(digest);
+        }
+    }
 }
 
 IEnumerable<DigestInfo> FilterImageInfoDigests(IEnumerable<DigestInfo> digests, string imageInfoPath, string repoName)
 {
     HashSet<string> imageInfoDigests = [];
     JObject imageInfo = (JObject)JsonConvert.DeserializeObject(File.ReadAllText(imageInfoPath));
-    JObject repo = (JObject)imageInfo["repos"].First(repo => repo.ToString() == repoName);
+    JObject repo = (JObject)imageInfo["repos"].First(repo => repo["repo"].ToString() == repoName);
     foreach (JObject image in repo["images"])
     {
         if (image["manifest"] is not null)
@@ -103,7 +114,7 @@ IEnumerable<DigestInfo> FilterImageInfoDigests(IEnumerable<DigestInfo> digests, 
         }
     }
 
-    return digests.Where(digest => imageInfoDigests.Contains(digest.Digest));
+    return digests.Where(digest => !imageInfoDigests.Contains(digest.Digest));
 }
 
 DateOnly? GetEolDate(Version version)
@@ -133,8 +144,25 @@ async Task<IEnumerable<DigestInfo>> GetNonKustoDataAsync(string repoName, Dictio
     await Parallel.ForEachAsync(props, async (prop, cts) =>
     {
         string digest = $"{repoName}@{prop.Digest}";
-        if (!kustoRows.ContainsKey(digest) && await IsImageDigestAsync(contentClient, prop.Digest))
+        if (!kustoRows.ContainsKey(digest))
         {
+            Azure.Response<GetManifestResult> manifest;
+            try
+            {
+                manifest = await contentClient.GetManifestAsync(prop.Digest);
+            }
+            catch(Exception)
+            {
+                failedDigests.Add(digest);
+                return;
+            }
+            
+            var manifestObj = manifest.Value.Manifest.ToObjectFromJson<JsonObject>();
+
+            if (manifestObj["subject"] is not null)
+            {
+                return;
+            }
             bool hasVersionTag = false;
             if (checkDotNetVersion)
             {
@@ -154,13 +182,11 @@ async Task<IEnumerable<DigestInfo>> GetNonKustoDataAsync(string repoName, Dictio
             
             if (!hasVersionTag)
             {
-                var manifestResult = await contentClient.GetManifestAsync(prop.Digest);
-                var manifest = manifestResult.Value.Manifest.ToObjectFromJson<JsonObject>();
-                var config = manifest["config"];
+                var config = manifestObj["config"];
                 DateTimeOffset created;
                 if (config is not null)
                 {
-                    string? configDigest = manifest["config"]?["digest"]?.ToString();
+                    string? configDigest = manifestObj["config"]?["digest"]?.ToString();
                     DownloadRegistryBlobResult configBlob = await contentClient.DownloadBlobContentAsync(configDigest);
                     var configJson = configBlob.Content.ToObjectFromJson<JsonObject>();
                     created = DateTimeOffset.Parse(configJson["created"].ToString());
@@ -203,13 +229,6 @@ async Task<IEnumerable<DigestInfo>> GetNonKustoDataAsync(string repoName, Dictio
     //var notAnnotated = imageDigests.Except(annotatedDigests).ToList();
 }
 
-static async Task<bool> IsImageDigestAsync(ContainerRegistryContentClient contentClient, string digest)
-{
-    var manifest = await contentClient.GetManifestAsync(digest);
-    var manifestObj = manifest.Value.Manifest.ToObjectFromJson<JsonObject>();
-    return manifestObj["subject"] is null;
-}
-
 static async Task<IEnumerable<DigestInfo>> FilterNonMarDigestsAsync(IEnumerable<DigestInfo> values)
 {
     RegistryClient client = new("mcr.microsoft.com");
@@ -242,7 +261,7 @@ Dictionary<string, DigestInfo> GetKustoData(string repoName)
     Dictionary<string, DigestInfo> digests = new();
     const string clusterResource = "https://Dotnettel.kusto.windows.net";
     KustoConnectionStringBuilder connectionBuilder = new KustoConnectionStringBuilder(clusterResource)
-        .WithAadAzCliAuthentication();
+        .WithAadAzureTokenCredentialsAuthentication(new DefaultAzureCredential());
     using var kustoClient = KustoClientFactory.CreateCslQueryProvider(connectionBuilder);
 
     string query = $"""
