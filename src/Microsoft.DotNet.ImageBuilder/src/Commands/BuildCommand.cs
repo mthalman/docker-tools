@@ -342,13 +342,12 @@ namespace Microsoft.DotNet.ImageBuilder.Commands
                                 sourceRepoUrl: Options.SourceRepoUrl,
                                 isDryRun: Options.IsDryRun);
 
-                            if (cacheResult.State == ImageCacheState.Cached
-                                || cacheResult.State == ImageCacheState.CachedWithMissingTags)
+                            if (cacheResult.State.HasFlag(ImageCacheState.Cached))
                             {
                                 isCachedImage = true;
 
                                 CopyPlatformDataFromCachedPlatform(platformData, cacheResult.Platform!);
-                                platformData.IsUnchanged = cacheResult.State == ImageCacheState.Cached;
+                                platformData.IsUnchanged = cacheResult.State != ImageCacheState.CachedWithMissingTags;
 
                                 await OnCacheHitAsync(repoInfo, allTagInfos, pullImage: cacheResult.IsNewCacheHit, cacheResult.Platform!.Digest);
                             }
