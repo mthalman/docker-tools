@@ -169,22 +169,23 @@ public class ImageCacheService : IImageCacheService
         string.Join('-', platform.BuildArgs.Select(kvp => $"{kvp.Key}={kvp.Value}").ToArray());
 }
 
+[Flags]
 public enum ImageCacheState
 {
     /// <summary>
     /// Indicates a previously built image was not found in the registry.
     /// </summary>
-    NotCached,
+    NotCached = 0,
 
     /// <summary>
     /// Indicates a previously built image was found in the registry.
     /// </summary>
-    Cached,
+    Cached = 1,
 
     /// <summary>
     /// Indicates a previously built image was found in the registry but is missing new tags.
     /// </summary>
-    CachedWithMissingTags
+    CachedWithMissingTags = Cached | 2
 }
 
 public record ImageCacheResult(ImageCacheState State, bool IsNewCacheHit, PlatformData? Platform);

@@ -331,13 +331,13 @@ namespace Microsoft.DotNet.ImageBuilder.Commands
                         {
                             ImageCacheResult cacheResult = await _imageCacheService.CheckForCachedImageAsync(
                                 srcImageData, platformData, _imageDigestCache, _imageNameResolver.Value, Options.SourceRepoUrl, Options.IsDryRun);
-                            if (cacheResult.State == ImageCacheState.Cached || cacheResult.State == ImageCacheState.CachedWithMissingTags)
+                            if (cacheResult.State.HasFlag(ImageCacheState.Cached))
                             {
                                 isCachedImage = true;
                                 if (platformData is not null)
                                 {
                                     CopyPlatformDataFromCachedPlatform(platformData, cacheResult.Platform!);
-                                    platformData.IsUnchanged = cacheResult.State == ImageCacheState.Cached;
+                                    platformData.IsUnchanged = cacheResult.State != ImageCacheState.CachedWithMissingTags;
                                 }
 
                                 await OnCacheHitAsync(repoInfo, allTagInfos, pullImage: cacheResult.IsNewCacheHit, cacheResult.Platform!.Digest);
