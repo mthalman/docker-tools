@@ -60,7 +60,7 @@ namespace Microsoft.DotNet.ImageBuilder.Tests
             using (TempFolderContext tempFolderContext = TestHelper.UseTempFolder())
             {
                 Mock<IManifestServiceFactory> manifestServiceFactoryMock = CreateManifestServiceFactoryMock(
-                    imageDigestResults:
+                    localImageDigestResults:
                     [
                         new($"{runtimeDepsRepo}:{tag}", runtimeDepsDigest),
                         new($"{runtimeRepo}:{tag}", runtimeDigest),
@@ -743,7 +743,7 @@ namespace Microsoft.DotNet.ImageBuilder.Tests
 
             using TempFolderContext tempFolderContext = TestHelper.UseTempFolder();
 
-            Mock<IManifestService> manifestServiceMock = CreateManifestServiceMock(imageDigestResults: [ new($"{runtimeDepsRepo}:{tag}", runtimeDepsDigest) ], []);
+            Mock<IManifestService> manifestServiceMock = CreateManifestServiceMock(localImageDigestResults: [ new($"{runtimeDepsRepo}:{tag}", runtimeDepsDigest) ], []);
             Mock<IManifestServiceFactory> manifestServiceFactoryMock = CreateManifestServiceFactoryMock(manifestServiceMock);
 
             Mock<IDockerService> dockerServiceMock = CreateDockerServiceMock();
@@ -938,7 +938,7 @@ namespace Microsoft.DotNet.ImageBuilder.Tests
             {
                 Mock<IDockerService> dockerServiceMock = CreateDockerServiceMock();
                 Mock<IManifestServiceFactory> manifestServiceFactoryMock = CreateManifestServiceFactoryMock(
-                    imageDigestResults:
+                    localImageDigestResults:
                     [
                         new("runtime:runtime", "runtime@sha256:adc914a9f125ca612f9a67e4a0551937b7a37c82fabb46172c4867b73ed99227")
                     ],
@@ -1125,7 +1125,8 @@ namespace Microsoft.DotNet.ImageBuilder.Tests
             string runtimeDepsRepoQualified = $"{registry}/{runtimeDepsRepo}";
             string runtimeRepoQualified = $"{registry}/{runtimeRepo}";
             string runtimeDepsDigest = $"{runtimeDepsRepoQualified}@{currentRuntimeDepsImageSha}";
-            string runtimeDigest = $"{runtimeRepoQualified}@sha256:adc914a9f125ca612f9a67e4a0551937b7a37c82fabb46172c4867b73ed99227";
+            const string runtimeDigestSha = "sha256:adc914a9f125ca612f9a67e4a0551937b7a37c82fabb46172c4867b73ed99227";
+            string runtimeDigest = $"{runtimeRepoQualified}@{runtimeDigestSha}";
             const string tag = "tag";
             const string baseImageRepo = "baserepo";
             string baseImageTag = $"{baseImageRepo}:basetag";
@@ -1135,14 +1136,22 @@ namespace Microsoft.DotNet.ImageBuilder.Tests
 
             Mock<IDockerService> dockerServiceMock = CreateDockerServiceMock();
 
-            Mock<IManifestServiceFactory> manifestServiceFactoryMock = CreateManifestServiceFactoryMock(imageDigestResults:
+            Mock<IManifestServiceFactory> manifestServiceFactoryMock = CreateManifestServiceFactoryMock(
+                localImageDigestResults:
                 [
                     new($"{runtimeDepsRepoQualified}:{tag}", runtimeDepsDigest),
                     new($"{overridePrefix}{runtimeDepsRepo}:{tag}", runtimeDepsDigest),
                     new($"{runtimeRepoQualified}:{tag}", runtimeDigest),
                     new($"{overridePrefix}{runtimeRepo}:{tag}", runtimeDigest),
                     new(baseImageTag, runtimeDepsBaseImageDigest),
-                ], []);
+                ],
+                externalImageDigestResults:
+                [
+                    new($"{overridePrefix}{runtimeDepsRepo}:{tag}", currentRuntimeDepsImageSha),
+                    new($"{overridePrefix}{runtimeRepo}:{tag}", runtimeDigestSha),
+                    new(baseImageTag, runtimeDepsBaseImageDigest),
+                    new(baseImageTag, currentBaseImageSha),
+                ]);
 
             DateTime createdDate = DateTime.Now;
 
@@ -1157,7 +1166,7 @@ namespace Microsoft.DotNet.ImageBuilder.Tests
                 "1.0/runtime-deps/os", tempFolderContext, baseImageTag);
 
             string runtimeDockerfileRelativePath = DockerfileHelper.CreateDockerfile(
-                "1.0/runtime/os", tempFolderContext, $"{runtimeDepsRepoQualified}:{tag}");
+                "1.0/runtime/os", tempFolderContext, $"$REPO:{tag}");
 
             Mock<IGitService> gitServiceMock = new Mock<IGitService>();
             gitServiceMock
@@ -1188,9 +1197,6 @@ namespace Microsoft.DotNet.ImageBuilder.Tests
             command.Options.RepoPrefix = repoPrefixOverride;
             command.Options.Subscription = "my-sub";
             command.Options.ResourceGroup = "resource-group";
-
-
-
 
             const string ProductVersion = "1.0.1";
 
@@ -1294,7 +1300,7 @@ namespace Microsoft.DotNet.ImageBuilder.Tests
                     CreateImage(
                         new Platform[]
                         {
-                                CreatePlatform(runtimeDockerfileRelativePath, new string[] { tag })
+                                CreatePlatformWithRepoBuildArg(runtimeDockerfileRelativePath, $"$(Repo:{runtimeDepsRepo})", new string[] { tag })
                         },
                         productVersion: ProductVersion))
             );
@@ -1435,21 +1441,29 @@ namespace Microsoft.DotNet.ImageBuilder.Tests
             const string windowsBaseImageRepo = "windows-baserepo";
             string linuxBaseImageTag = $"{linuxBaseImageRepo}:basetag";
             string windowsBaseImageTag = $"{windowsBaseImageRepo}:basetag";
-            string runtimeDepsLinuxBaseImageDigest = $"{linuxBaseImageRepo}@sha";
-            string runtimeDepsWindowsBaseImageDigest = $"{windowsBaseImageRepo}@sha";
+
+            const string runtimeDepsLinuxBaseImageDigestSha = "sha256:linux-base";
+            string runtimeDepsLinuxBaseImageDigest = $"{linuxBaseImageRepo}@{runtimeDepsLinuxBaseImageDigestSha}";
+            const string runtimeDepsWindowsBaseImageDigestSha = "sha256:windows-base";
+            string runtimeDepsWindowsBaseImageDigest = $"{windowsBaseImageRepo}@{runtimeDepsWindowsBaseImageDigestSha}";
             const string currentRuntimeDepsCommitSha = "commit-sha";
 
             using TempFolderContext tempFolderContext = TestHelper.UseTempFolder();
 
             Mock<IDockerService> dockerServiceMock = CreateDockerServiceMock();
 
-            Mock<IManifestService> manifestServiceMock = CreateManifestServiceMock([
+            Mock<IManifestService> manifestServiceMock = CreateManifestServiceMock(
+                localImageDigestResults:
+                [
                     new($"{runtimeDepsRepo}:{linuxTag}", runtimeDepsLinuxDigest),
                     new($"{runtimeDepsRepo}:{windowsTag}", runtimeDepsWindowsDigest),
                     new($"{runtimeDeps2Repo}:{linuxTag}", runtimeDeps2Digest),
-                    new(linuxBaseImageTag, runtimeDepsLinuxBaseImageDigest),
-                    new(windowsBaseImageTag, runtimeDepsWindowsBaseImageDigest),
-                ], []);
+                ],
+                externalImageDigestResults:
+                [
+                    new(linuxBaseImageTag, runtimeDepsLinuxBaseImageDigestSha),
+                    new(windowsBaseImageTag, runtimeDepsWindowsBaseImageDigestSha),
+                ]);
             Mock<IManifestServiceFactory> manifestServiceFactoryMock = CreateManifestServiceFactoryMock(manifestServiceMock);
 
             DateTime createdDate = DateTime.Now;
@@ -1499,9 +1513,6 @@ namespace Microsoft.DotNet.ImageBuilder.Tests
             command.Options.SourceRepoUrl = "https://github.com/dotnet/test";
             command.Options.Subscription = "my-sub";
             command.Options.ResourceGroup = "resource-group";
-
-
-
 
             const string ProductVersion = "1.0.1";
 
@@ -1693,8 +1704,8 @@ namespace Microsoft.DotNet.ImageBuilder.Tests
 
             Assert.Equal(expectedOutput, actualOutput);
 
-            manifestServiceMock.Verify(o => o.GetImageDigestAsync(linuxBaseImageTag, false), Times.Once);
-            manifestServiceMock.Verify(o => o.GetImageDigestAsync(windowsBaseImageTag, false), Times.Once);
+            manifestServiceMock.Verify(o => o.GetLocalImageDigestAsync(linuxBaseImageTag, false), Times.Once);
+            manifestServiceMock.Verify(o => o.GetLocalImageDigestAsync(windowsBaseImageTag, false), Times.Once);
             manifestServiceMock.Verify(o => o.GetImageLayersAsync($"{runtimeDepsRepo}:{linuxTag}", false), Times.Once);
             manifestServiceMock.Verify(o => o.GetImageLayersAsync($"{runtimeDepsRepo}:{windowsTag}", false), Times.Once);
             manifestServiceMock.Verify(o => o.GetImageLayersAsync($"{runtimeDeps2Repo}:{linuxTag}", false), Times.Once);
@@ -1756,7 +1767,8 @@ namespace Microsoft.DotNet.ImageBuilder.Tests
             const string tag = "tag";
             const string baseImageRepo = "baserepo";
             string baseImageTag = $"{baseImageRepo}:basetag";
-            string runtimeDepsBaseImageDigest = $"{baseImageRepo}@sha-base";
+            const string runtimeDepsBaseImageDigestSha = "sha256:base";
+            string runtimeDepsBaseImageDigest = $"{baseImageRepo}@{runtimeDepsBaseImageDigestSha}";
             const string currentRuntimeDepsCommitSha = "commit-sha";
 
             using TempFolderContext tempFolderContext = TestHelper.UseTempFolder();
@@ -1764,13 +1776,17 @@ namespace Microsoft.DotNet.ImageBuilder.Tests
             Mock<IDockerService> dockerServiceMock = CreateDockerServiceMock();
 
             Mock<IManifestService> manifestServiceMock = CreateManifestServiceMock(
-                imageDigestResults:
+                localImageDigestResults:
                 [
                     new($"{runtimeDepsRepo}:{tag}", runtimeDepsDigest),
                     new($"{runtimeDeps2Repo}:{tag}", runtimeDeps2Digest),
                     new($"{runtimeDeps3Repo}:{tag}", runtimeDeps3Digest),
                     new(baseImageTag, runtimeDepsBaseImageDigest),
-                ], []);
+                ],
+                externalImageDigestResults:
+                [
+                    new(baseImageTag, runtimeDepsBaseImageDigestSha),
+                ]);
             Mock<IManifestServiceFactory> manifestServiceFactoryMock = CreateManifestServiceFactoryMock(manifestServiceMock);
 
             DateTime createdDate = DateTime.Now;
@@ -1814,9 +1830,6 @@ namespace Microsoft.DotNet.ImageBuilder.Tests
             command.Options.SourceRepoUrl = "https://github.com/dotnet/test";
             command.Options.Subscription = "my-sub";
             command.Options.ResourceGroup = "resource-group";
-
-
-
 
             const string ProductVersion = "1.0.1";
 
@@ -2010,7 +2023,7 @@ namespace Microsoft.DotNet.ImageBuilder.Tests
             manifestServiceMock.Verify(o => o.GetImageLayersAsync($"{runtimeDepsRepo}:{tag}", false), Times.Once);
             manifestServiceMock.Verify(o => o.GetImageLayersAsync($"{runtimeDeps2Repo}:{tag}", false), Times.Once);
             manifestServiceMock.Verify(o => o.GetImageLayersAsync($"{runtimeDeps3Repo}:{tag}", false), Times.Once);
-            manifestServiceMock.Verify(o => o.GetImageDigestAsync(It.IsAny<string>(), false));
+            manifestServiceMock.Verify(o => o.GetLocalImageDigestAsync(It.IsAny<string>(), false));
 
             dockerServiceMock.Verify(o => o.PullImage(runtimeDepsDigest, null, false));
             dockerServiceMock.Verify(o => o.CreateTag(runtimeDepsDigest, $"{runtimeDepsRepo}:{tag}", false));
@@ -2237,9 +2250,9 @@ namespace Microsoft.DotNet.ImageBuilder.Tests
                     Times.Once);
             }
 
-            manifestServiceMock.Verify(o => o.GetImageDigestAsync(baseImageTag, false));
-            manifestServiceMock.Verify(o => o.GetImageDigestAsync($"{runtimeDepsRepo}:{tag}", false));
-            manifestServiceMock.Verify(o => o.GetImageDigestAsync($"{runtimeDeps2Repo}:{tag}", false));
+            manifestServiceMock.Verify(o => o.GetLocalImageDigestAsync(baseImageTag, false));
+            manifestServiceMock.Verify(o => o.GetLocalImageDigestAsync($"{runtimeDepsRepo}:{tag}", false));
+            manifestServiceMock.Verify(o => o.GetLocalImageDigestAsync($"{runtimeDeps2Repo}:{tag}", false));
             manifestServiceMock.Verify(o => o.GetImageLayersAsync($"{runtimeDepsRepo}:{tag}", false), Times.Once);
             manifestServiceMock.Verify(o => o.GetImageLayersAsync($"{runtimeDeps2Repo}:{tag}", false), Times.Once);
 
@@ -2481,9 +2494,9 @@ namespace Microsoft.DotNet.ImageBuilder.Tests
                     Times.Once);
             }
 
-            manifestServiceMock.Verify(o => o.GetImageDigestAsync(baseImageTag, false));
-            manifestServiceMock.Verify(o => o.GetImageDigestAsync($"{runtimeDepsRepo}:{tag}", false));
-            manifestServiceMock.Verify(o => o.GetImageDigestAsync($"{runtimeDeps2Repo}:{tag}", false));
+            manifestServiceMock.Verify(o => o.GetLocalImageDigestAsync(baseImageTag, false));
+            manifestServiceMock.Verify(o => o.GetLocalImageDigestAsync($"{runtimeDepsRepo}:{tag}", false));
+            manifestServiceMock.Verify(o => o.GetLocalImageDigestAsync($"{runtimeDeps2Repo}:{tag}", false));
             manifestServiceMock.Verify(o => o.GetImageLayersAsync($"{runtimeDepsRepo}:{tag}", false), Times.Once);
             manifestServiceMock.Verify(o => o.GetImageLayersAsync($"{runtimeDeps2Repo}:{tag}", false), Times.Once);
 
@@ -2508,15 +2521,21 @@ namespace Microsoft.DotNet.ImageBuilder.Tests
             const string newTag = "new-tag";
             const string baseImageRepo = "baserepo";
             string baseImageTag = $"{baseImageRepo}:basetag";
-            string runtimeDepsLinuxBaseImageDigest = $"{baseImageRepo}@sha";
+            const string runtimeDepsLinuxBaseImageDigestSha = "sha256:base";
+            string runtimeDepsLinuxBaseImageDigest = $"{baseImageRepo}@{runtimeDepsLinuxBaseImageDigestSha}";
             const string currentRuntimeDepsCommitSha = "commit-sha";
 
             using TempFolderContext tempFolderContext = TestHelper.UseTempFolder();
 
-            Mock<IManifestService> manifestServiceMock = CreateManifestServiceMock([
+            Mock<IManifestService> manifestServiceMock = CreateManifestServiceMock(
+                localImageDigestResults:
+                [
                     new($"{runtimeDepsRepo}:{tag}", runtimeDepsDigest),
-                    new(baseImageTag, runtimeDepsLinuxBaseImageDigest),
-                ], []);
+                ],
+                externalImageDigestResults:
+                [
+                    new(baseImageTag, runtimeDepsLinuxBaseImageDigestSha),
+                ]);
 
             DateTime createdDate = DateTime.Now;
 
@@ -2679,7 +2698,7 @@ namespace Microsoft.DotNet.ImageBuilder.Tests
 
             Assert.Equal(expectedOutput, actualOutput);
 
-            manifestServiceMock.Verify(o => o.GetImageDigestAsync(baseImageTag, false), Times.Once);
+            manifestServiceMock.Verify(o => o.GetLocalImageDigestAsync(baseImageTag, false), Times.Once);
             manifestServiceMock.Verify(o => o.GetImageLayersAsync($"{runtimeDepsRepo}:{tag}", false), Times.Once);
             manifestServiceMock.Verify(o => o.GetImageLayersAsync($"{runtimeDepsRepo}:{newTag}", false), Times.Once);
 
@@ -2721,7 +2740,8 @@ namespace Microsoft.DotNet.ImageBuilder.Tests
             const string newTag = "new-tag";
             const string baseImageRepo = "baserepo";
             string baseImageTag = $"{baseImageRepo}:basetag";
-            string runtimeDepsLinuxBaseImageDigest = $"{baseImageRepo}@sha";
+            const string runtimeDepsLinuxBaseImageDigestSha = "sha256:base";
+            string runtimeDepsLinuxBaseImageDigest = $"{baseImageRepo}@{runtimeDepsLinuxBaseImageDigestSha}";
             const string currentRuntimeDepsCommitSha = "commit-sha";
             const string registry = "mcr.microsoft.com";
             const string registryOverride = "new-registry.azurecr.io";
@@ -2730,11 +2750,16 @@ namespace Microsoft.DotNet.ImageBuilder.Tests
 
             using TempFolderContext tempFolderContext = TestHelper.UseTempFolder();
 
-            Mock<IManifestService> manifestServiceMock = CreateManifestServiceMock([
+            Mock<IManifestService> manifestServiceMock = CreateManifestServiceMock(
+                localImageDigestResults:
+                [
                     new($"{runtimeDepsRepo}:{tag}", runtimeDepsLinuxDigest),
                     new($"{runtimeDeps2Repo}:{tag}", runtimeDeps2Digest),
-                    new(baseImageTag, runtimeDepsLinuxBaseImageDigest),
-                ], []);
+                ],
+                externalImageDigestResults:
+                [
+                    new(baseImageTag, runtimeDepsLinuxBaseImageDigestSha),
+                ]);
 
             DateTime createdDate = DateTime.Now;
 
@@ -2944,7 +2969,7 @@ namespace Microsoft.DotNet.ImageBuilder.Tests
             manifestServiceMock.Verify(o => o.GetImageLayersAsync($"{overridePrefix}{runtimeDepsRepo}:{tag}", false), Times.Once);
             manifestServiceMock.Verify(o => o.GetImageLayersAsync($"{overridePrefix}{runtimeDeps2Repo}:{tag}", false), Times.Once);
             manifestServiceMock.Verify(o => o.GetImageLayersAsync($"{overridePrefix}{runtimeDeps2Repo}:{newTag}", false), Times.Once);
-            manifestServiceMock.Verify(o => o.GetImageDigestAsync(baseImageTag, false), Times.Once);
+            manifestServiceMock.Verify(o => o.GetLocalImageDigestAsync(baseImageTag, false), Times.Once);
 
             dockerServiceMock.Verify(o => o.PullImage($"{overridePrefix}{runtimeDepsLinuxDigest}", null, false), Times.Once);
             dockerServiceMock.Verify(o => o.PullImage(baseImageTag, "linux/amd64", false), Times.Once);
@@ -2999,8 +3024,9 @@ namespace Microsoft.DotNet.ImageBuilder.Tests
 
             const string SourceRepoPrefix = "my-mirror/";
             string mirrorBaseTag = $"{RegistryOverride}/{SourceRepoPrefix}{srcBaseImageTag}";
+            const string srcBaseImageDigestSha = "sha256:d21234a9f125ca612f9a67e4a0551937b7a37c82fabb46172c4867b73edd1349";
             string srcBaseImageDigest =
-                $"{srcBaseImageRepo}@sha256:d21234a9f125ca612f9a67e4a0551937b7a37c82fabb46172c4867b73edd1349";
+                $"{srcBaseImageRepo}@{srcBaseImageDigestSha}";
             string expectedImageInfoBaseImageDigest =
                 $"{referencedBaseImageRepo}@sha256:d21234a9f125ca612f9a67e4a0551937b7a37c82fabb46172c4867b73edd1349";
             string mirrorBaseImageDigest =
@@ -3012,14 +3038,21 @@ namespace Microsoft.DotNet.ImageBuilder.Tests
             Mock<IManifestService> manifestServiceMock;
             if (hasCachedImage)
             {
-                manifestServiceMock = CreateManifestServiceMock([
-                        new($"{Registry}/{RuntimeDepsRepo}:{Tag}", $"{Registry}/{RuntimeDepsRepo}@{RuntimeDepsDigest}"),
-                        new($"{Registry}/{RuntimeRepo}:{Tag}", $"{Registry}/{RuntimeRepo}@{RuntimeDigest}"),
-                        new($"{Registry}/{AspnetRepo}:{Tag}", $"{Registry}/{AspnetRepo}@{AspnetDigest}"),
-                        new($"{RegistryOverride}/{RepoPrefix}{RuntimeDepsRepo}:{Tag}", $"{RegistryOverride}/{RuntimeDepsRepo}@{RuntimeDepsDigest}"),
+                manifestServiceMock = CreateManifestServiceMock(
+                    localImageDigestResults:
+                    [
                         new($"{RegistryOverride}/{RepoPrefix}{RuntimeRepo}:{Tag}", $"{RegistryOverride}/{RuntimeRepo}@{RuntimeDigest}"),
                         new($"{RegistryOverride}/{RepoPrefix}{AspnetRepo}:{Tag}", $"{RegistryOverride}/{AspnetRepo}@{AspnetDigest}"),
-                    ], []);
+                    ],
+                    externalImageDigestResults:
+                    [
+                        new($"{Registry}/{RuntimeDepsRepo}:{Tag}", RuntimeDepsDigest),
+                        new($"{Registry}/{RuntimeRepo}:{Tag}", RuntimeDigest),
+                        new($"{Registry}/{AspnetRepo}:{Tag}", AspnetDigest),
+                        new($"{RegistryOverride}/{RepoPrefix}{RuntimeDepsRepo}:{Tag}", RuntimeDepsDigest),
+                        new($"{RegistryOverride}/{RepoPrefix}{RuntimeRepo}:{Tag}", RuntimeDigest),
+                        new($"{RegistryOverride}/{RepoPrefix}{AspnetRepo}:{Tag}", AspnetDigest),
+                    ]);
             }
             else
             {
@@ -3028,21 +3061,25 @@ namespace Microsoft.DotNet.ImageBuilder.Tests
                 manifestServiceMock = CreateManifestServiceMock([], []);
 
                 manifestServiceMock
-                    .Setup(o => o.GetImageDigestAsync($"{RegistryOverride}/{RepoPrefix}{RuntimeDepsRepo}:{Tag}", false))
-                    .ReturnsAsync(callCount => callCount > 2 ? $"{RegistryOverride}/{RepoPrefix}{RuntimeDepsRepo}@{RuntimeDepsDigest}" : null);
+                    .Setup(o => o.GetLocalImageDigestAsync($"{RegistryOverride}/{RepoPrefix}{RuntimeDepsRepo}:{Tag}", false))
+                    .ReturnsAsync(callCount => callCount > 1 ? $"{RegistryOverride}/{RepoPrefix}{RuntimeDepsRepo}@{RuntimeDepsDigest}" : null);
 
                 manifestServiceMock
-                    .Setup(o => o.GetImageDigestAsync($"{RegistryOverride}/{RepoPrefix}{RuntimeRepo}:{Tag}", false))
+                    .Setup(o => o.GetLocalImageDigestAsync($"{RegistryOverride}/{RepoPrefix}{RuntimeRepo}:{Tag}", false))
                     .ReturnsAsync(callCount => callCount > 1 ? $"{RegistryOverride}/{RepoPrefix}{RuntimeRepo}@{RuntimeDigest}" : null);
 
                 manifestServiceMock
-                    .Setup(o => o.GetImageDigestAsync($"{RegistryOverride}/{RepoPrefix}{AspnetRepo}:{Tag}", false))
+                    .Setup(o => o.GetLocalImageDigestAsync($"{RegistryOverride}/{RepoPrefix}{AspnetRepo}:{Tag}", false))
                     .ReturnsAsync(callCount => callCount > 0 ? $"{RegistryOverride}/{RepoPrefix}{AspnetRepo}@{AspnetDigest}" : null);
             }
 
             manifestServiceMock
-                .Setup(o => o.GetImageDigestAsync(mirrorBaseTag, false))
+                .Setup(o => o.GetLocalImageDigestAsync(mirrorBaseTag, false))
                 .ReturnsAsync(mirrorBaseImageDigest);
+
+            manifestServiceMock
+                .Setup(o => o.GetManifestDigestShaAsync(mirrorBaseTag, false))
+                .ReturnsAsync(srcBaseImageDigestSha);
 
             DateTime createdDate = DateTime.Now.ToUniversalTime();
             dockerServiceMock
@@ -3334,12 +3371,12 @@ namespace Microsoft.DotNet.ImageBuilder.Tests
             }
             else
             {
-                manifestServiceMock.Verify(o => o.GetImageDigestAsync($"{RegistryOverride}/{RepoPrefix}{RuntimeDepsRepo}:{Tag}", false));
-                manifestServiceMock.Verify(o => o.GetImageDigestAsync($"{RegistryOverride}/{RepoPrefix}{RuntimeRepo}:{Tag}", false));
+                manifestServiceMock.Verify(o => o.GetLocalImageDigestAsync($"{RegistryOverride}/{RepoPrefix}{RuntimeDepsRepo}:{Tag}", false));
+                manifestServiceMock.Verify(o => o.GetLocalImageDigestAsync($"{RegistryOverride}/{RepoPrefix}{RuntimeRepo}:{Tag}", false));
             }
 
-            manifestServiceMock.Verify(o => o.GetImageDigestAsync(mirrorBaseTag, false));
-            manifestServiceMock.Verify(o => o.GetImageDigestAsync($"{RegistryOverride}/{RepoPrefix}{AspnetRepo}:{Tag}", false));
+            manifestServiceMock.Verify(o => o.GetLocalImageDigestAsync(mirrorBaseTag, false));
+            manifestServiceMock.Verify(o => o.GetLocalImageDigestAsync($"{RegistryOverride}/{RepoPrefix}{AspnetRepo}:{Tag}", false));
 
             if (!hasCachedImage)
             {
@@ -3458,8 +3495,8 @@ namespace Microsoft.DotNet.ImageBuilder.Tests
                     It.IsAny<bool>()));
 
             dockerServiceMock.Verify(o => o.PullImage($"{baseImageRepoPrefix}/{RuntimeRepo}:{Tag}", "linux/amd64", false));
-            manifestServiceMock.Verify(o => o.GetImageDigestAsync($"{baseImageRepoPrefix}/{RuntimeRepo}:{Tag}", false));
-            manifestServiceMock.Verify(o => o.GetImageDigestAsync($"{RegistryOverride}/{SamplesRepo}:{Tag}", false));
+            manifestServiceMock.Verify(o => o.GetLocalImageDigestAsync($"{baseImageRepoPrefix}/{RuntimeRepo}:{Tag}", false));
+            manifestServiceMock.Verify(o => o.GetLocalImageDigestAsync($"{RegistryOverride}/{SamplesRepo}:{Tag}", false));
             dockerServiceMock.Verify(o => o.PushImage($"{RegistryOverride}/{SamplesRepo}:{Tag}", false));
             dockerServiceMock.Verify(o => o.GetCreatedDate($"{RegistryOverride}/{SamplesRepo}:{Tag}", false));
             manifestServiceMock.Verify(o => o.GetImageLayersAsync($"{RegistryOverride}/{SamplesRepo}:{Tag}", false));
@@ -3602,8 +3639,8 @@ namespace Microsoft.DotNet.ImageBuilder.Tests
                     It.IsAny<bool>()));
 
             dockerServiceMock.Verify(o => o.PullImage($"{baseImageRepoPrefix}/{MirroredBaseTag}", "linux/amd64", false));
-            manifestServiceMock.Verify(o => o.GetImageDigestAsync($"{baseImageRepoPrefix}/{MirroredBaseTag}", false));
-            manifestServiceMock.Verify(o => o.GetImageDigestAsync($"{RegistryOverride}/{SamplesRepo}:{ImageTag}", false));
+            manifestServiceMock.Verify(o => o.GetLocalImageDigestAsync($"{baseImageRepoPrefix}/{MirroredBaseTag}", false));
+            manifestServiceMock.Verify(o => o.GetLocalImageDigestAsync($"{RegistryOverride}/{SamplesRepo}:{ImageTag}", false));
             dockerServiceMock.Verify(o => o.PushImage($"{RegistryOverride}/{SamplesRepo}:{ImageTag}", false));
             dockerServiceMock.Verify(o => o.GetCreatedDate($"{RegistryOverride}/{SamplesRepo}:{ImageTag}", false));
             manifestServiceMock.Verify(o => o.GetImageLayersAsync($"{RegistryOverride}/{SamplesRepo}:{ImageTag}", false));

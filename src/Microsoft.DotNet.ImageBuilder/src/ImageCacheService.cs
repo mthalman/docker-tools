@@ -145,20 +145,35 @@ public class ImageCacheService : IImageCacheService
             return true;
         }
 
-        string? currentBaseImageDigest = await imageDigestCache.GetImageDigestAsync(
-            imageNameResolver.GetFromImageLocalTag(platform.FinalStageFromImage),
-            isDryRun);
+        string queryImage;
+        if (platform.IsInternalFromImage(platform.FinalStageFromImage))
+        {
+            queryImage = platform.FinalStageFromImage;
+        }
+        else
+        {
+            queryImage = imageNameResolver.GetFromImagePullTag(platform.FinalStageFromImage);
+        }
 
-        string? baseSha = srcPlatformData.BaseImageDigest is not null ?
+        string? currentSha;
+        try
+        {
+            currentSha = await imageDigestCache.GetManifestDigestShaAsync(queryImage, isDryRun);
+        }
+        // Handle cases where the image is not found in the registry yet
+        catch (Exception)
+        {
+            currentSha = null;
+        }
+
+        string? imageInfoSha = srcPlatformData.BaseImageDigest is not null ?
             DockerHelper.GetDigestSha(srcPlatformData.BaseImageDigest) :
             null;
-        string? currentSha = currentBaseImageDigest is not null ?
-            DockerHelper.GetDigestSha(currentBaseImageDigest) :
-            null;
-        bool baseImageDigestMatches = baseSha?.Equals(currentSha, StringComparison.OrdinalIgnoreCase) == true;
+        
+        bool baseImageDigestMatches = imageInfoSha?.Equals(currentSha, StringComparison.OrdinalIgnoreCase) == true;
 
-        _loggerService.WriteMessage($"Image info's base image digest: {srcPlatformData.BaseImageDigest}");
-        _loggerService.WriteMessage($"Latest base image digest: {currentBaseImageDigest}");
+        _loggerService.WriteMessage($"Image info's base image digest SHA: {imageInfoSha}");
+        _loggerService.WriteMessage($"Latest base image digest SHA: {currentSha}");
         _loggerService.WriteMessage($"Base image digests match: {baseImageDigestMatches}");
         return baseImageDigestMatches;
     }

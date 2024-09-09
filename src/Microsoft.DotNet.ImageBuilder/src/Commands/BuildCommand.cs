@@ -269,7 +269,7 @@ namespace Microsoft.DotNet.ImageBuilder.Commands
         private async Task SetPlatformDataDigestAsync(PlatformData platform, string tag)
         {
             // The digest of an image that is pushed to ACR is guaranteed to be the same when transferred to MCR.
-            string? digest = await _imageDigestCache.GetImageDigestAsync(tag, Options.IsDryRun);
+            string? digest = await _imageDigestCache.GetLocalImageDigestAsync(tag, Options.IsDryRun);
             if (digest is not null && platform.PlatformInfo is not null)
             {
                 digest = DockerHelper.GetDigestString(platform.PlatformInfo.FullRepoModelName, DockerHelper.GetDigestSha(digest));
@@ -362,9 +362,9 @@ namespace Microsoft.DotNet.ImageBuilder.Commands
 
                             if (Options.IsPushEnabled && platform.FinalStageFromImage is not null)
                             {
-                                platformData.BaseImageDigest = await _imageDigestCache.GetImageDigestAsync(
-                                    tag: _imageNameResolver.Value.GetFromImageLocalTag(platform.FinalStageFromImage),
-                                    Options.IsDryRun);
+                                platformData.BaseImageDigest =
+                                   await _imageDigestCache.GetLocalImageDigestAsync(
+                                       _imageNameResolver.Value.GetFromImageLocalTag(platform.FinalStageFromImage), Options.IsDryRun);
                             }
                         }
                     }
@@ -639,7 +639,7 @@ namespace Microsoft.DotNet.ImageBuilder.Commands
                         // the DockerServiceCache for later use.  The longer we wait to get the digest after pulling, the
                         // greater chance the tag could be updated resulting in a different digest returned than what was
                         // originally pulled.
-                        await _imageDigestCache.GetImageDigestAsync(fromImage, Options.IsDryRun);
+                        await _imageDigestCache.GetLocalImageDigestAsync(fromImage, Options.IsDryRun);
                     });
 
                     // Tag the images that were pulled from the mirror as they are referenced in the Dockerfiles

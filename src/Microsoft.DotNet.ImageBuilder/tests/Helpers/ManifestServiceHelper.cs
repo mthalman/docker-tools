@@ -1,8 +1,10 @@
-﻿using System.Collections.Generic;
+﻿// Licensed to the .NET Foundation under one or more agreements.
+// The .NET Foundation licenses this file to you under the MIT license.
+
+using System;
+using System.Collections.Generic;
 using Microsoft.DotNet.ImageBuilder.Tests.Helpers;
 using Moq;
-// Licensed to the .NET Foundation under one or more agreements.
-// The .NET Foundation licenses this file to you under the MIT license.
 
 #nullable enable
 namespace Microsoft.DotNet.ImageBuilder.Tests.Helpers;
@@ -14,9 +16,11 @@ internal static class ManifestServiceHelper
     public record ImageLayersResults(string Image, IEnumerable<string> Layers);
 
     public static Mock<IManifestServiceFactory> CreateManifestServiceFactoryMock(
-        IEnumerable<ImageDigestResults>? imageDigestResults = null,
+        IEnumerable<ImageDigestResults>? localImageDigestResults = null,
+        IEnumerable<ImageDigestResults>? externalImageDigestResults = null,
         IEnumerable<ImageLayersResults>? imageLayersResults = null) =>
-            CreateManifestServiceFactoryMock(CreateManifestServiceMock(imageDigestResults, imageLayersResults));
+            CreateManifestServiceFactoryMock(
+                CreateManifestServiceMock(localImageDigestResults, externalImageDigestResults, imageLayersResults));
 
     public static Mock<IManifestServiceFactory> CreateManifestServiceFactoryMock(
         Mock<IInnerManifestService> innerManifestService) =>
@@ -38,18 +42,32 @@ internal static class ManifestServiceHelper
     }
 
     public static Mock<IManifestService> CreateManifestServiceMock(
-        IEnumerable<ImageDigestResults>? imageDigestResults = null,
+        IEnumerable<ImageDigestResults>? localImageDigestResults = null,
+        IEnumerable<ImageDigestResults>? externalImageDigestResults = null,
         IEnumerable<ImageLayersResults>? imageLayersResults = null)
     {
         Mock<IManifestService> manifestServiceMock = new();
 
-        imageDigestResults ??= [];
+        // By default, have it throw an exception which indicates that the manifest was not found
+        manifestServiceMock
+            .Setup(o => o.GetManifestDigestShaAsync(It.IsAny<string>(), It.IsAny<bool>()))
+            .ThrowsAsync(new Exception());
+
+        localImageDigestResults ??= [];
+        externalImageDigestResults ??= [];
         imageLayersResults ??= [];
 
-        foreach ((string image, string digest) in imageDigestResults)
+        foreach ((string image, string digest) in localImageDigestResults)
         {
             manifestServiceMock
-                .Setup(o => o.GetImageDigestAsync(image, false))
+                .Setup(o => o.GetLocalImageDigestAsync(image, false))
+                .ReturnsAsync(digest);
+        }
+
+        foreach ((string image, string digest) in externalImageDigestResults)
+        {
+            manifestServiceMock
+                .Setup(o => o.GetManifestDigestShaAsync(image, false))
                 .ReturnsAsync(digest);
         }
 
