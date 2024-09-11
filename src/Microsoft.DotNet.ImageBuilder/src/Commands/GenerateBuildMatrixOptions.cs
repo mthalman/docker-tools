@@ -20,6 +20,7 @@ namespace Microsoft.DotNet.ImageBuilder.Commands
         public IEnumerable<string> DistinctMatrixOsVersions { get; set; } = Enumerable.Empty<string>();
         public BaseImageOverrideOptions BaseImageOverrideOptions { get; set; } = new();
         public string? SourceRepoPrefix { get; set; }
+        public string? SourceRepoUrl { get; set; }
         public RegistryCredentialsOptions CredentialsOptions { get; set; } = new();
         public bool TrimCachedImages { get; set; }
     }
@@ -50,6 +51,8 @@ namespace Microsoft.DotNet.ImageBuilder.Commands
                     "OS version to be contained in its own distinct matrix"),
                 CreateOption<string?>("source-repo-prefix", nameof(GenerateBuildMatrixOptions.SourceRepoPrefix),
                     "Prefix to add to the external base image names when pulling them"),
+                CreateOption<string?>("source-repo", nameof(BuildOptions.SourceRepoUrl),
+                    "Repo URL of the Dockerfile sources"),
                 CreateOption<bool>("trim-cached-images", nameof(GenerateBuildMatrixOptions.TrimCachedImages),
                     "Whether to trim cached images from the set of paths"),
             ];

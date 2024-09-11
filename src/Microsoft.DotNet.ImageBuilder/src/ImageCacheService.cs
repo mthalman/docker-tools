@@ -32,6 +32,7 @@ public class ImageCacheService : IImageCacheService
     private readonly IGitService _gitService;
 
     // Metadata about Dockerfiles whose images have been retrieved from the cache
+    private readonly object _cachedPlatformsLock = new();
     private readonly Dictionary<string, PlatformData> _cachedPlatforms = [];
 
     [ImportingConstructor]
@@ -41,7 +42,16 @@ public class ImageCacheService : IImageCacheService
         _gitService = gitService ?? throw new ArgumentNullException(nameof(gitService));
     }
 
-    public bool HasAnyCachedPlatforms => _cachedPlatforms.Any();
+    public bool HasAnyCachedPlatforms
+    {
+        get
+        {
+            lock (_cachedPlatformsLock)
+            {
+                return _cachedPlatforms.Any();
+            }
+        }
+    }
 
     public async Task<ImageCacheResult> CheckForCachedImageAsync(
         ImageData? srcImageData,
@@ -62,15 +72,18 @@ public class ImageCacheService : IImageCacheService
         }
 
         string cacheKey = GetBuildCacheKey(platformData.PlatformInfo);
-        if (_cachedPlatforms.TryGetValue(cacheKey, out PlatformData? cachedPlatform))
+        lock (_cachedPlatformsLock)
         {
-            cacheState = ImageCacheState.Cached;
-            if (srcPlatformData is null ||
-                !CachedPlatformHasAllTagsPublished(srcPlatformData))
+            if (_cachedPlatforms.TryGetValue(cacheKey, out PlatformData? cachedPlatform))
             {
-                cacheState = ImageCacheState.CachedWithMissingTags;
+                cacheState = ImageCacheState.Cached;
+                if (srcPlatformData is null ||
+                    !CachedPlatformHasAllTagsPublished(srcPlatformData))
+                {
+                    cacheState = ImageCacheState.CachedWithMissingTags;
+                }
+                return new ImageCacheResult(cacheState, isNewCacheHit, cachedPlatform);
             }
-            return new ImageCacheResult(cacheState, isNewCacheHit, cachedPlatform);
         }
 
         // If this Dockerfile has been built and published before
@@ -92,7 +105,10 @@ public class ImageCacheService : IImageCacheService
                 {
                     cacheState = ImageCacheState.CachedWithMissingTags;
                 }
-                _cachedPlatforms[cacheKey] = srcPlatformData;
+                lock (_cachedPlatformsLock)
+                {
+                    _cachedPlatforms[cacheKey] = srcPlatformData;
+                }
             }
         }
 
@@ -145,15 +161,7 @@ public class ImageCacheService : IImageCacheService
             return true;
         }
 
-        string queryImage;
-        if (platform.IsInternalFromImage(platform.FinalStageFromImage))
-        {
-            queryImage = platform.FinalStageFromImage;
-        }
-        else
-        {
-            queryImage = imageNameResolver.GetFromImagePullTag(platform.FinalStageFromImage);
-        }
+        string queryImage = imageNameResolver.GetFinalStageImageNameForDigestQuery(platform);
 
         string? currentSha;
         try

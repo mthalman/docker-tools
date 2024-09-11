@@ -26,7 +26,7 @@ namespace Microsoft.DotNet.ImageBuilder.Commands
         private static readonly Regex s_versionRegex = new(@$"^(?<{VersionRegGroupName}>(\d|\.)+).*$");
         private readonly IImageCacheService _imageCacheService;
         private readonly ImageDigestCache _imageDigestCache;
-        private readonly Lazy<ImageNameResolver> _imageNameResolver;
+        private readonly Lazy<ImageNameResolverForMatrix> _imageNameResolver;
 
         [ImportingConstructor]
         public GenerateBuildMatrixCommand(IImageCacheService imageCacheService, IManifestServiceFactory manifestServiceFactory) : base()
@@ -44,8 +44,8 @@ namespace Microsoft.DotNet.ImageBuilder.Commands
             _imageDigestCache = new ImageDigestCache(
                 new Lazy<IManifestService>(
                     () => manifestServiceFactory.Create(ownedAcr: Options.RegistryOverride, Options.CredentialsOptions)));
-            _imageNameResolver = new Lazy<ImageNameResolver>(() =>
-                new ImageNameResolver(Options.BaseImageOverrideOptions, Manifest, Options.RepoPrefix, Options.SourceRepoPrefix));
+            _imageNameResolver = new Lazy<ImageNameResolverForMatrix>(() =>
+                new ImageNameResolverForMatrix(Options.BaseImageOverrideOptions, Manifest, Options.RepoPrefix, Options.SourceRepoPrefix));
         }
 
         protected override string Description => "Generate the Azure DevOps build matrix for building the images";
@@ -448,12 +448,12 @@ namespace Microsoft.DotNet.ImageBuilder.Commands
                 await Parallel.ForEachAsync(subgraph, async (platformMapping, _) =>
                 {
                     ImageCacheResult cacheResult = await _imageCacheService.CheckForCachedImageAsync(
-                    platformMapping.ImageData,
-                    platformMapping.PlatformData,
-                    _imageDigestCache,
-                    _imageNameResolver.Value,
-                    Options.SourceRepoPrefix,
-                    Options.IsDryRun);
+                        platformMapping.ImageData,
+                        platformMapping.PlatformData,
+                        _imageDigestCache,
+                        _imageNameResolver.Value,
+                        Options.SourceRepoUrl,
+                        Options.IsDryRun);
 
                     if (!cacheResult.State.HasFlag(ImageCacheState.Cached))
                     {
