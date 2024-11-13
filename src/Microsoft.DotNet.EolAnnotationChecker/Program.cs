@@ -17,6 +17,7 @@ ConcurrentBag<string> failedDigests = new();
 Dictionary<string, DateOnly> eolDates = new()
 {
     { "7.0", new DateOnly(2024, 5, 14) },
+    { "6.0", new DateOnly(2024, 11, 12) },
     { "5.0", new DateOnly(2022, 5, 10) },
     { "3.1", new DateOnly(2022, 12, 13) },
     { "3.0", new DateOnly(2020, 3, 3) },
@@ -96,7 +97,7 @@ async Task ExecuteAsync(string outputPath, string repoName, bool queryKusto, str
 
 IEnumerable<DigestInfo> FilterImageInfoDigests(IEnumerable<DigestInfo> digests, string imageInfoPath, string repoName)
 {
-    HashSet<string> imageInfoDigests = [];
+    HashSet<string> filteredDigests = [];
     JObject imageInfo = (JObject)JsonConvert.DeserializeObject(File.ReadAllText(imageInfoPath));
     JObject repo = (JObject)imageInfo["repos"].First(repo => repo["repo"].ToString() == repoName);
     foreach (JObject image in repo["images"])
@@ -104,17 +105,17 @@ IEnumerable<DigestInfo> FilterImageInfoDigests(IEnumerable<DigestInfo> digests, 
         if (image["manifest"] is not null)
         {
             string digest = image["manifest"]["digest"].ToString().Replace("mcr.microsoft.com", "dotnetdocker.azurecr.io/public");
-            imageInfoDigests.Add(digest);
+            filteredDigests.Add(digest);
         }
 
         foreach (JObject platform in image["platforms"])
         {
             string digest = platform["digest"].ToString().Replace("mcr.microsoft.com", "dotnetdocker.azurecr.io/public");
-            imageInfoDigests.Add(digest);
+            filteredDigests.Add(digest);
         }
     }
 
-    return digests.Where(digest => !imageInfoDigests.Contains(digest.Digest));
+    return digests.Where(digest => (digest.ProductVersion is not null && eolDates.ContainsKey(digest.ProductVersion.ToString(2))) || !filteredDigests.Contains(digest.Digest));
 }
 
 DateOnly? GetEolDate(Version version)
